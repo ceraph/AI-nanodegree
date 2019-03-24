@@ -111,9 +111,6 @@ class TestNakedTwinsCustom(unittest.TestCase):
         self.result['A4'] = '4'
         self.result['A7'] = '7'
 
-    def test_digits_to_remove(self):
-        self.assertEqual(['2','5'], solution.digits_to_remove('A2', self.values))
-
     def test_remove_digits(self):
         digits = ['2', '3']
         values = {'A1': '12', 'A2': '234'}

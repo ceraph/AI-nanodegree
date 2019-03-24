@@ -21,10 +21,6 @@ units = extract_units(unitlist, boxes)
 peers = extract_peers(units, boxes)
 
 
-def digits_to_remove(box, values) -> List[chr]:
-    return [digit for digit in values[box]]
-
-
 def remove_digits(digits, box, values):
     for digit in digits:
         values[box] = values[box].replace(digit, '')
@@ -58,7 +54,7 @@ def naked_twins(values):
         for peer in peers[box]:
             if values[box] == values[peer]:
                 for common_peer in common_peers(box, peer, peers):
-                    remove_digits(digits_to_remove(box, values), common_peer, result)
+                    remove_digits(values[box], common_peer, result)
 
     return result
 
