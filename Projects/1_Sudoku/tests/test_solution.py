@@ -111,24 +111,23 @@ class TestNakedTwinsCustom(unittest.TestCase):
         self.result['A4'] = '4'
         self.result['A7'] = '7'
 
-    def test_find_boxes_for_one_twin(self):
-        self.assertEqual({'A2', 'A5'}, set(solution.find_boxes_for_one_twin(self.unit, self.values)))
-
     def test_digits_to_remove(self):
         self.assertEqual(['2','5'], solution.digits_to_remove('A2', self.values))
 
     def test_remove_digits(self):
         digits = ['2', '3']
         values = {'A1': '12', 'A2': '234'}
-        result = {'A1': '1', 'A2': '4'}
+        result = {'A1': '1', 'A2': '234'}
         self.assertNotEqual(result, values)
-        solution.remove_digits(digits, values.keys(), values)
+        solution.remove_digits(digits, 'A1', values)
         self.assertEqual(result, values)
 
-
-    def test_remove_one_twin(self):
-        twins = ['A2', 'A5']
-        # self.assertEqual(result, solution.remove_one_twin(unit, values))
+    def test_common_peers(self):
+        peers = {
+            'A1': {'A2', 'A3', 'A4'},
+            'A2': {'A1', 'A3'}
+        }
+        self.assertEqual({'A3'}, solution.common_peers('A1', 'A2', peers))
 
 
 if __name__ == '__main__':

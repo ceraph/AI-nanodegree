@@ -21,77 +21,46 @@ units = extract_units(unitlist, boxes)
 peers = extract_peers(units, boxes)
 
 
-def find_boxes_for_one_twin(unit, values):
-    twins = []
-    for b1 in unit:
-        if len(twins) > 1:
-            return twins
-        twins.clear()
-        for b2 in unit:
-            if values[b1] == values[b2]:
-                twins.append(b2)
-    return twins
-
-
 def digits_to_remove(box, values) -> List[chr]:
     return [digit for digit in values[box]]
 
 
-def remove_digits(digits, boxes, values):
+def remove_digits(digits, box, values):
     for digit in digits:
-        for box in boxes:
-            values[box] = values[box].replace(digit, '')
+        values[box] = values[box].replace(digit, '')
+    return values
 
 
-def remove_one_twin(unit: List[str], values: Dict[str, str]):
-    twins = find_boxes_for_one_twin(unit, values)
-    digits = digits_to_remove(twins[0], values)
-    non_twin_boxes = [box for box in unit if box not in twins]
-    remove_digits(digits, non_twin_boxes, values)
-
-    return unit
+def common_peers(box_a, box_b, peers: Dict[str, set]):
+    return peers[box_a].intersection(peers[box_b])
 
 
 def naked_twins(values):
     """Eliminate values using the naked twins strategy.
 
-    The naked twins strategy says that if you have two or more unallocated boxes
-    in a unit and there are only two digits that can go in those two boxes, then
-    those two digits can be eliminated from the possible assignments of all other
-    boxes in the same unit.
+    function NakedTwins(values) returns a dict mapping from Sudoku box names to a list of feasible values
+     inputs:
+      values, a dict mapping from Sudoku box names to a list of feasible values
 
-    Parameters
-    ----------
-    values(dict)
-        a dictionary of the form {'box_name': '123456789', ...}
-
-    Returns
-    -------
-    dict
-        The values dictionary with the naked twins eliminated from peers
-
-    Notes
-    -----
-    Your solution can either process all pairs of naked twins from the input once,
-    or it can continue processing pairs of naked twins until there are no such
-    pairs remaining -- the project assistant test suite will accept either
-    convention. However, it will not accept code that does not process all pairs
-    of naked twins from the original input. (For example, if you start processing
-    pairs of twins and eliminate another pair of twins before the second pair
-    is processed then your code will fail the PA test suite.)
-
-    The first convention is preferred for consistency with the other strategies,
-    and because it is simpler (since the reduce_puzzle function already calls this
-    strategy repeatedly).
-
-    See Also
-    --------
-    Pseudocode for this algorithm on github:
-    https://github.com/udacity/artificial-intelligence/blob/master/Projects/1_Sudoku/pseudocode.md
+     out <- copy(values) /* make a deep copy */
+     for each boxA in values do
+      for each boxB of PEERS(boxA) do
+       if both values[boxA] and values[boxB] exactly match and have only two feasible digits do
+        for each peer of INTERSECTION(PEERS(boxA), PEERS(boxB)) do
+         for each digit of values[boxA] do
+          remove digit d from out[peer]
+     return out
     """
-    for unit in unitlist:
-        remove_one_twin(unit, values)
-    return values
+    result = values.copy()
+    for box in values.keys():
+        if len(values[box]) != 2:
+            continue
+        for peer in peers[box]:
+            if values[box] == values[peer]:
+                for common_peer in common_peers(box, peer, peers):
+                    remove_digits(digits_to_remove(box, values), common_peer, result)
+
+    return result
 
 
 def eliminate(values):
