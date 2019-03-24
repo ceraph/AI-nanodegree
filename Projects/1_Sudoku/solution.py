@@ -38,7 +38,9 @@ def digits_to_remove(box, values) -> List[chr]:
 
 
 def remove_digits(digits, boxes, values):
-    pass
+    for digit in digits:
+        for box in boxes:
+            values[box] = values[box].replace(digit, '')
 
 
 def remove_one_twin(unit: List[str], values: Dict[str, str]):

@@ -106,24 +106,28 @@ class TestNakedTwinsCustom(unittest.TestCase):
         self.values = {
             'A1': '1', 'A2': '25', 'A3': '3', 'A4': '45', 'A5': '25', 'A6': '6', 'A7': '257', 'A8': '8', 'A9': '9',
         }
+        self.unit = self.values.keys()
+        self.result = self.values.copy()
+        self.result['A4'] = '4'
+        self.result['A7'] = '7'
 
     def test_find_boxes_for_one_twin(self):
-        cols = '123456789'
-        unit = [''.join(['A', cols[i]]) for i in range(9)]
-        self.assertEqual(['A2', 'A5'], solution.find_boxes_for_one_twin(unit, self.values))
+        self.assertEqual({'A2', 'A5'}, set(solution.find_boxes_for_one_twin(self.unit, self.values)))
 
     def test_digits_to_remove(self):
         self.assertEqual(['2','5'], solution.digits_to_remove('A2', self.values))
 
+    def test_remove_digits(self):
+        digits = ['2', '3']
+        values = {'A1': '12', 'A2': '234'}
+        result = {'A1': '1', 'A2': '4'}
+        self.assertNotEqual(result, values)
+        solution.remove_digits(digits, values.keys(), values)
+        self.assertEqual(result, values)
+
 
     def test_remove_one_twin(self):
-        unit = {
-            'A1': '1', 'A2': '25', 'A3': '3', 'A4': '45', 'A5': '25', 'A6': '6', 'A7': '257', 'A8': '8', 'A9': '9',
-        }
         twins = ['A2', 'A5']
-        result = {
-            'A1': '1', 'A2': '25', 'A3': '3', 'A4': '4', 'A5': '25', 'A6': '6', 'A7': '7', 'A8': '8', 'A9': '9',
-        }
         # self.assertEqual(result, solution.remove_one_twin(unit, values))
 
 
