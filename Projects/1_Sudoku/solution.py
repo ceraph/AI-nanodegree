@@ -22,7 +22,15 @@ peers = extract_peers(units, boxes)
 
 
 def find_boxes_for_one_twin(unit, values):
-    pass
+    twins = []
+    for b1 in unit:
+        if len(twins) > 1:
+            return twins
+        twins.clear()
+        for b2 in unit:
+            if values[b1] == values[b2]:
+                twins.append(b2)
+    return twins
 
 
 def digits_to_remove(box, values):

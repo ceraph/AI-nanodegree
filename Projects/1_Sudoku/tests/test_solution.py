@@ -99,5 +99,27 @@ class TestDiagonalSudoku(unittest.TestCase):
     def test_solve(self):
         self.assertEqual(solution.solve(self.diagonal_grid), self.solved_diag_sudoku)
 
+
+class TestNakedTwinsCustom(unittest.TestCase):
+
+    def test_find_boxes_for_one_twin(self):
+        cols = '123456789'
+        unit = [''.join(['A', cols[i]]) for i in range(9)]
+        values = {
+            'A1': '1', 'A2': '25', 'A3': '3', 'A4': '45', 'A5': '25', 'A6': '6', 'A7': '257', 'A8': '8', 'A9': '9',
+        }
+        self.assertEqual(['A2', 'A5'], solution.find_boxes_for_one_twin(unit, values))
+
+    def test_remove_one_twin(self):
+        unit = {
+            'A1': '1', 'A2': '25', 'A3': '3', 'A4': '45', 'A5': '25', 'A6': '6', 'A7': '257', 'A8': '8', 'A9': '9',
+        }
+        twins = ['A2', 'A5']
+        result = {
+            'A1': '1', 'A2': '25', 'A3': '3', 'A4': '4', 'A5': '25', 'A6': '6', 'A7': '7', 'A8': '8', 'A9': '9',
+        }
+        # self.assertEqual(result, solution.remove_one_twin(unit, values))
+
+
 if __name__ == '__main__':
     unittest.main()
