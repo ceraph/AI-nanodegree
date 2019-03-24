@@ -1,5 +1,6 @@
 
 from utils import *
+from typing import *
 
 
 row_units = [cross(r, cols) for r in rows]
@@ -18,6 +19,27 @@ unitlist.append(build_diagonal(rows, cols[::-1]))
 # Must be called after all units (including diagonals) are added to the unitlist
 units = extract_units(unitlist, boxes)
 peers = extract_peers(units, boxes)
+
+
+def find_boxes_for_one_twin(unit, values):
+    pass
+
+
+def digits_to_remove(box, values):
+    pass
+
+
+def remove_digits(digits, boxes, values):
+    pass
+
+
+def remove_one_twin(unit: List[str], values: Dict[str, str]):
+    twins = find_boxes_for_one_twin(unit, values)
+    digits = digits_to_remove(twins[0], values)
+    non_twin_boxes = [box for box in unit if box not in twins]
+    remove_digits(digits, non_twin_boxes, values)
+
+    return unit
 
 
 def naked_twins(values):
@@ -57,8 +79,9 @@ def naked_twins(values):
     Pseudocode for this algorithm on github:
     https://github.com/udacity/artificial-intelligence/blob/master/Projects/1_Sudoku/pseudocode.md
     """
-    # TODO: Implement this function!
-    raise NotImplementedError
+    for unit in unitlist:
+        remove_one_twin(unit, values)
+    return values
 
 
 def eliminate(values):
@@ -136,6 +159,7 @@ def reduce_puzzle(values):
         values = eliminate(values)
         # Use the Only Choice Strategy
         values = only_choice(values)
+        values = naked_twins(values)
         # Check how many boxes have a determined value, to compare
         solved_values_after = len([box for box in values.keys() if len(values[box]) == 1])
         # If no new values were added, stop the loop.
