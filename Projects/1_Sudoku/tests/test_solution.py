@@ -102,13 +102,19 @@ class TestDiagonalSudoku(unittest.TestCase):
 
 class TestNakedTwinsCustom(unittest.TestCase):
 
+    def setUp(self):
+        self.values = {
+            'A1': '1', 'A2': '25', 'A3': '3', 'A4': '45', 'A5': '25', 'A6': '6', 'A7': '257', 'A8': '8', 'A9': '9',
+        }
+
     def test_find_boxes_for_one_twin(self):
         cols = '123456789'
         unit = [''.join(['A', cols[i]]) for i in range(9)]
-        values = {
-            'A1': '1', 'A2': '25', 'A3': '3', 'A4': '45', 'A5': '25', 'A6': '6', 'A7': '257', 'A8': '8', 'A9': '9',
-        }
-        self.assertEqual(['A2', 'A5'], solution.find_boxes_for_one_twin(unit, values))
+        self.assertEqual(['A2', 'A5'], solution.find_boxes_for_one_twin(unit, self.values))
+
+    def test_digits_to_remove(self):
+        self.assertEqual(['2','5'], solution.digits_to_remove('A2', self.values))
+
 
     def test_remove_one_twin(self):
         unit = {

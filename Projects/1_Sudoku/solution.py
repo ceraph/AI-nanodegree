@@ -33,8 +33,8 @@ def find_boxes_for_one_twin(unit, values):
     return twins
 
 
-def digits_to_remove(box, values):
-    pass
+def digits_to_remove(box, values) -> List[chr]:
+    return [digit for digit in values[box]]
 
 
 def remove_digits(digits, boxes, values):
