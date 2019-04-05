@@ -189,8 +189,24 @@ class PlanningGraph:
         -----
         WARNING: you should expect long runtimes using this heuristic on complex problems
         """
-        # TODO: implement setlevel heuristic
-        raise NotImplementedError
+        self.fill()
+        i = -1
+        for layer in self.literal_layers:
+            i += 1
+            all_goals_met = True
+            for goal in self.goal:
+                if goal not in layer:
+                    all_goals_met = False
+            if not all_goals_met:
+                continue
+
+            goals_are_mutex = False
+            for goal_a in self.goal:
+                for goal_b in self.goal:
+                    if layer.is_mutex(goal_a, goal_b):
+                        goals_are_mutex = True
+            if not goals_are_mutex:
+                return i
 
     ##############################################################################
     #                     DO NOT MODIFY CODE BELOW THIS LINE                     #
