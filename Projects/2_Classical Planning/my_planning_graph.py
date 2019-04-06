@@ -19,8 +19,15 @@ class ActionLayer(BaseActionLayer):
         --------
         layers.ActionNode
         """
-        # TODO: implement this function
-        raise NotImplementedError
+        effect_by_action = self.children
+        effects_of_a = effect_by_action[actionA]
+        effects_of_b = effect_by_action[actionB]
+
+        for effect in effects_of_a:
+            if ~effect in effects_of_b:
+                return True
+
+        return False
 
 
     def _interference(self, actionA, actionB):
