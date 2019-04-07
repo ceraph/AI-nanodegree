@@ -93,8 +93,19 @@ class LiteralLayer(BaseLiteralLayer):
         --------
         layers.BaseLayer.parent_layer
         """
-        # TODO: implement this function
-        raise NotImplementedError
+        action_by_literal = self.parents
+
+        actions_for_a = action_by_literal[literalA]
+        actions_for_b = action_by_literal[literalB]
+
+        # Check if all actions are mutex
+        for actionA in actions_for_a:
+            for actionB in actions_for_b:
+                if not self.parent_layer.is_mutex(actionA, actionB):
+                    return False
+
+        return True
+
 
     def _negation(self, literalA, literalB):
         """ Return True if two literals are negations of each other """
