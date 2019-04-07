@@ -205,12 +205,17 @@ class PlanningGraph:
         -----
         WARNING: you should expect long runtimes using this heuristic with A*
         """
-        self.fill()
-
-        costs = []
-        for goal in self.goal:
-            costs.append(self.levelCost(goal))
-        return max(costs)
+        i = 0
+        while not self._is_leveled:
+            all_goals_met = True
+            for goal in self.goal:
+                if not goal in self.literal_layers[-1]:
+                    all_goals_met = False
+            if all_goals_met:
+                return i
+            else:
+                self._extend()
+            i += 1
 
 
     def h_setlevel(self):
