@@ -39,20 +39,11 @@ class ActionLayer(BaseActionLayer):
         --------
         layers.ActionNode
         """
-        precondition_by_action = self.parents
-        precondition_of_a = precondition_by_action[actionA]
-        precondition_of_b = precondition_by_action[actionB]
-
-        effect_by_action = self.children
-        effects_of_a = effect_by_action[actionA]
-        effects_of_b = effect_by_action[actionB]
+        precondition_of_b = self.parents[actionB]
+        effects_of_a = self.children[actionA]
 
         for effect in effects_of_a:
             if ~effect in precondition_of_b:
-                return True
-
-        for effect in effects_of_b:
-            if ~effect in precondition_of_a:
                 return True
 
 
