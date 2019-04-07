@@ -69,8 +69,15 @@ class ActionLayer(BaseActionLayer):
         layers.ActionNode
         layers.BaseLayer.parent_layer
         """
-        # TODO: implement this function
-        raise NotImplementedError
+        literals_of_parent = self.parent_layer
+
+        precondition_by_action = self.parents
+        precondition_of_a = precondition_by_action[actionA]
+        precondition_of_b = precondition_by_action[actionB]
+
+        for literal in precondition_of_a:
+            if ~literal in precondition_of_b and (literal in literals_of_parent and ~literal in literals_of_parent):
+                return True
 
 
 class LiteralLayer(BaseLiteralLayer):
