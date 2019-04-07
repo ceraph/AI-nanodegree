@@ -69,15 +69,14 @@ class ActionLayer(BaseActionLayer):
         layers.ActionNode
         layers.BaseLayer.parent_layer
         """
-        literals_of_parent = self.parent_layer
-
         precondition_by_action = self.parents
         precondition_of_a = precondition_by_action[actionA]
         precondition_of_b = precondition_by_action[actionB]
 
-        for literal in precondition_of_a:
-            if ~literal in precondition_of_b and (literal in literals_of_parent and ~literal in literals_of_parent):
-                return True
+        for literalA in precondition_of_a:
+            for literalB in precondition_of_b:
+                if self.parent_layer.is_mutex(literalA, literalB):
+                    return True
 
 
 class LiteralLayer(BaseLiteralLayer):
