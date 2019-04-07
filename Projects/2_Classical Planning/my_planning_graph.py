@@ -27,8 +27,6 @@ class ActionLayer(BaseActionLayer):
             if ~effect in effects_of_b:
                 return True
 
-        return False
-
 
     def _interference(self, actionA, actionB):
         """ Return True if the effects of either action negate the preconditions of the other 
@@ -41,8 +39,23 @@ class ActionLayer(BaseActionLayer):
         --------
         layers.ActionNode
         """
-        # TODO: implement this function
-        raise NotImplementedError
+        precondition_by_action = self.parents
+        precondition_of_a = precondition_by_action[actionA]
+        precondition_of_b = precondition_by_action[actionB]
+
+        effect_by_action = self.children
+        effects_of_a = effect_by_action[actionA]
+        effects_of_b = effect_by_action[actionB]
+
+        for effect in effects_of_a:
+            if ~effect in precondition_of_b:
+                return True
+
+        for effect in effects_of_b:
+            if ~effect in precondition_of_a:
+                return True
+
+
 
     def _competing_needs(self, actionA, actionB):
         """ Return True if any preconditions of the two actions are pairwise mutex in the parent layer
