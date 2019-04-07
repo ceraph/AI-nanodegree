@@ -27,7 +27,6 @@ class ActionLayer(BaseActionLayer):
             if ~effect in effects_of_b:
                 return True
 
-
     def _interference(self, actionA, actionB):
         """ Return True if the effects of either action negate the preconditions of the other 
 
@@ -45,8 +44,6 @@ class ActionLayer(BaseActionLayer):
         for effect in effects_of_a:
             if ~effect in precondition_of_b:
                 return True
-
-
 
     def _competing_needs(self, actionA, actionB):
         """ Return True if any preconditions of the two actions are pairwise mutex in the parent layer
@@ -95,7 +92,6 @@ class LiteralLayer(BaseLiteralLayer):
                     return False
 
         return True
-
 
     def _negation(self, literalA, literalB):
         """ Return True if two literals are negations of each other """
@@ -166,7 +162,7 @@ class PlanningGraph:
 
         costs = []
         for goal in self.goal:
-            costs.append(self.levelCost(goal))
+            costs.append(self.level_cost(goal))
         return sum(costs)
 
     def h_maxlevel(self):
@@ -207,7 +203,6 @@ class PlanningGraph:
             else:
                 self._extend()
             i += 1
-
 
     def h_setlevel(self):
         """ Calculate the set level heuristic for the planning graph
@@ -250,7 +245,7 @@ class PlanningGraph:
             if not goals_are_mutex:
                 return i
 
-    def levelCost(self, goal):
+    def level_cost(self, goal):
         i = 0
         for layer in self.literal_layers:
             if goal in layer:
