@@ -22,31 +22,41 @@ class CustomPlayer(DataPlayer):
     **********************************************************************
     """
     def get_action(self, state: Isolation):
-        """
-        This method must call self.queue.put(ACTION) at least once, and may
-        call it as many times as you want.
-        """
-        self.queue.put(self.minimax(state, 1))
+        # Do something at least.
+        import random
+        self.queue.put(random.choice(state.actions()))
 
-    def minimax(self, state, depth) -> Action:
+        alpha = float("-inf")
+        beta = float("inf")
+        depth = 3
+        minimax = self._minimax_with_alpha_beta_pruning(state, depth, alpha, beta)
+        self.queue.put(minimax)
 
-        def min_value(state, depth):
+    def _minimax_with_alpha_beta_pruning(self, state, depth, alpha, beta) -> Action:
+
+        def min_value(state, depth, alpha, beta):
             if state.terminal_test(): return state.utility(self.player_id)
             if depth <= 0: return self._heuristic_nr_of_moves(state)
             value = float("inf")
             for action in state.actions():
-                value = min(value, max_value(state.result(action), depth - 1))
+                value = min(value, max_value(state.result(action), depth - 1, alpha, beta))
+                if value <= alpha:
+                    break
+                beta = min(beta, value)
             return value
 
-        def max_value(state, depth):
+        def max_value(state, depth, alpha, beta):
             if state.terminal_test(): return state.utility(self.player_id)
             if depth <= 0: return self._heuristic_nr_of_moves(state)
             value = float("-inf")
             for action in state.actions():
-                value = max(value, min_value(state.result(action), depth - 1))
+                value = max(value, min_value(state.result(action), depth - 1, alpha, beta))
+                if value >= beta:
+                    break
+                alpha = max(alpha, value)
             return value
 
-        return max(state.actions(), key=lambda x: min_value(state.result(x), depth - 1))
+        return max(state.actions(), key=lambda x: min_value(state.result(x), depth - 1, alpha, beta))
 
     def _heuristic_nr_of_moves(self, state):
         own_loc = state.locs[self.player_id]
