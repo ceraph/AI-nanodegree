@@ -26,11 +26,14 @@ class CustomPlayer(DataPlayer):
         import random
         self.queue.put(random.choice(state.actions()))
 
+        # Iterative Deepening
         alpha = float("-inf")
         beta = float("inf")
-        depth = 3
-        action = self._minimax_with_alpha_beta_pruning(state, depth, alpha, beta)
-        self.queue.put(action)
+        depth = 1
+        while True:
+            best_action_so_far = self._minimax_with_alpha_beta_pruning(state, depth, alpha, beta)
+            self.queue.put(best_action_so_far)
+            depth += 1
 
     def _minimax_with_alpha_beta_pruning(self, state, depth, alpha, beta) -> Action:
 
