@@ -29,14 +29,14 @@ class CustomPlayer(DataPlayer):
         alpha = float("-inf")
         beta = float("inf")
         depth = 3
-        minimax = self._minimax_with_alpha_beta_pruning(state, depth, alpha, beta)
-        self.queue.put(minimax)
+        action = self._minimax_with_alpha_beta_pruning(state, depth, alpha, beta)
+        self.queue.put(action)
 
     def _minimax_with_alpha_beta_pruning(self, state, depth, alpha, beta) -> Action:
 
         def min_value(state, depth, alpha, beta):
             if state.terminal_test(): return state.utility(self.player_id)
-            if depth <= 0: return self._heuristic_nr_of_moves(state)
+            if depth <= 0: return self._heuristic(state)
             value = float("inf")
             for action in state.actions():
                 value = min(value, max_value(state.result(action), depth - 1, alpha, beta))
@@ -47,7 +47,7 @@ class CustomPlayer(DataPlayer):
 
         def max_value(state, depth, alpha, beta):
             if state.terminal_test(): return state.utility(self.player_id)
-            if depth <= 0: return self._heuristic_nr_of_moves(state)
+            if depth <= 0: return self._heuristic(state)
             value = float("-inf")
             for action in state.actions():
                 value = max(value, min_value(state.result(action), depth - 1, alpha, beta))
@@ -57,6 +57,10 @@ class CustomPlayer(DataPlayer):
             return value
 
         return max(state.actions(), key=lambda x: min_value(state.result(x), depth - 1, alpha, beta))
+
+
+    def _heuristic(self, state):
+        self._heuristic_nr_of_moves(state)
 
     def _heuristic_nr_of_moves(self, state):
         own_loc = state.locs[self.player_id]
