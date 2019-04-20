@@ -99,7 +99,7 @@ class CustomPlayer(DataPlayer):
         while True:
             children = state_node.get_children()
             if children:
-                if not len(children) == state_node.get_state().actions():
+                if len(children) != len(state_node.get_state().actions()):
                     state_node.clear_children()
                     return state_node
                 zero_play_child = None
@@ -113,16 +113,18 @@ class CustomPlayer(DataPlayer):
                 return state_node
 
     def _ucb1_algo(self, children):
-        best_child = None
-        best_value = float('-inf')
         c = sqrt(2)
         log_parent_plays = log(children[0].get_parent().plays)
+        is_own_move = children[0].player_id == self.player_id
+        values = []
         for child in children:
             v = child.wins/child.plays + c * sqrt(log_parent_plays / child.plays)
-            if v > best_value:
-                best_value = v
-                best_child = child
-        return best_child
+            values.append((v, child))
+        if is_own_move:
+            best_value = max(values, key=lambda e: e[0])
+        else:
+            best_value = min(values, key=lambda e: e[0])
+        return best_value[1]
 
     def _mcts_expansion(self, node: StateNode) -> StateNode:
         if node.get_state().terminal_test(): return node
