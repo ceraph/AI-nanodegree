@@ -1,5 +1,5 @@
 import random
-from time import time
+from math import log, sqrt
 
 from isolation import Isolation
 from isolation.isolation import Action
@@ -94,9 +94,27 @@ class CustomPlayer(DataPlayer):
         while True:
             children = state_node.get_children()
             if children:
-                state_node = next((child for child in children if child.plays == 0), random.choice(children))
+                zero_play_child = None
+                for child in children:
+                    if child.plays == 0:
+                        zero_play_child = child
+                        break
+                if zero_play_child: state_node = zero_play_child
+                else: state_node = self._ucb1_algo(children)
             else:
                 return state_node
+
+    def _ucb1_algo(self, children):
+        best_child = None
+        best_value = float('-inf')
+        c = sqrt(2)
+        log_parent_plays = log(children[0].get_parent().plays)
+        for child in children:
+            v = child.wins/child.plays + c * sqrt(log_parent_plays / child.plays)
+            if v > best_value:
+                best_value = v
+                best_child = child
+        return best_child
 
     def _mcts_expansion(self, parent_node: StateNode) -> StateNode:
         if parent_node.get_state().terminal_test(): return parent_node
