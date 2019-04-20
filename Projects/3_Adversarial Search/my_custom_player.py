@@ -14,6 +14,9 @@ class StateNode:
         self.wins = 0
         self.plays = 0
 
+    def get_state(self):
+        return self._state
+
     def get_parent(self):
         return self._parent
 
@@ -55,10 +58,10 @@ class CustomPlayer(DataPlayer):
         if not state_node:
             state_node = StateNode(state, None) # Create root node.
 
-        leaf_state = self._mcts_selection(state_node)
-        child_state = self._mcts_expansion(leaf_state)
-        utility = self._mcts_simulation(child_state)
-        self._mcts_backprop(utility)
+        leaf_node = self._mcts_selection(state_node)
+        child_node = self._mcts_expansion(leaf_node)
+        utility = self._mcts_simulation(child_node.get_state())
+        self._mcts_backprop(utility, child_node)
 
     def _mcts_selection(self, state_node: StateNode) -> StateNode:
         while True:
@@ -68,18 +71,26 @@ class CustomPlayer(DataPlayer):
             else:
                 return state_node
 
-    def _mcts_expansion(self, leaf_state: Isolation) -> Isolation:
-        a = random.choice(leaf_state.actions())
-        return leaf_state.result(a)
+    def _mcts_expansion(self, parent_node: StateNode) -> StateNode:
+        a = random.choice(parent_node.get_state().actions())
+        new_state = parent_node.get_state().result(a)
+        return StateNode(new_state, parent_node)
 
-    def _mcts_simulation(self, state):
+    def _mcts_simulation(self, state: Isolation):
         while True:
             if state.terminal_test(): return state.utility(self.player_id)
             state = state.result(random.choice(state.actions()))
 
-    def _mcts_backprop(self, utility):
-        if utility == 0:
+    def _mcts_backprop(self, utility, node: StateNode):
+        while node:
+            node.plays += 1
 
+            if utility == 0:
+                node.wins += .5
+            elif utility > 0 and node.player == self.player_id():
+                node.wins += 1
+
+            node = node.get_parent()
 
     def _minimax_with_alpha_beta_pruning(self, state, depth, alpha, beta) -> Action:
 
