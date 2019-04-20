@@ -1,8 +1,24 @@
+import random
+
 from isolation import Isolation
 from isolation.isolation import Action
 from sample_players import DataPlayer
 from typing import *
 
+class StateNode:
+    def __init__(self, state: Isolation, previous_node):
+        self._state = state
+        self._parent = previous_node
+        self._children = []
+        self.player = state.player()
+        self.wins = 0
+        self.plays = 0
+
+    def get_parent(self):
+        return self._parent
+
+    def get_children(self):
+        return self._children
 
 class CustomPlayer(DataPlayer):
     """ Implement your own agent to play knight's Isolation
@@ -23,17 +39,47 @@ class CustomPlayer(DataPlayer):
     """
     def get_action(self, state: Isolation):
         # Do something at least.
-        import random
         self.queue.put(random.choice(state.actions()))
 
         # Iterative Deepening
-        alpha = float("-inf")
-        beta = float("inf")
-        depth = 1
+        # alpha = float("-inf")
+        # beta = float("inf")
+        # depth = 1
+        # while True:
+        #     best_action_so_far = self._minimax_with_alpha_beta_pruning(state, depth, alpha, beta)
+        #     self.queue.put(best_action_so_far)
+        #     depth += 1
+
+        # Monte Carlo Tree Search
+        state_node = self.context[state]
+        if not state_node:
+            state_node = StateNode(state, None) # Create root node.
+
+        leaf_state = self._mcts_selection(state_node)
+        child_state = self._mcts_expansion(leaf_state)
+        utility = self._mcts_simulation(child_state)
+        self._mcts_backprop(utility)
+
+    def _mcts_selection(self, state_node: StateNode) -> StateNode:
         while True:
-            best_action_so_far = self._minimax_with_alpha_beta_pruning(state, depth, alpha, beta)
-            self.queue.put(best_action_so_far)
-            depth += 1
+            children = state_node.get_children()
+            if children:
+                state_node = random.choice(state_node.get_children())
+            else:
+                return state_node
+
+    def _mcts_expansion(self, leaf_state: Isolation) -> Isolation:
+        a = random.choice(leaf_state.actions())
+        return leaf_state.result(a)
+
+    def _mcts_simulation(self, state):
+        while True:
+            if state.terminal_test(): return state.utility(self.player_id)
+            state = state.result(random.choice(state.actions()))
+
+    def _mcts_backprop(self, utility):
+        if utility == 0:
+
 
     def _minimax_with_alpha_beta_pruning(self, state, depth, alpha, beta) -> Action:
 
@@ -70,3 +116,4 @@ class CustomPlayer(DataPlayer):
         own_liberties = state.liberties(own_loc)
         opp_liberties = state.liberties(opp_loc)
         return len(own_liberties) - len(opp_liberties)
+
