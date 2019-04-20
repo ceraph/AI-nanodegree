@@ -73,7 +73,6 @@ class CustomPlayer(DataPlayer):
 
         if not self.context: self.context = self.tree
         else: self.tree = self.context
-        print(len(self.tree.keys()))
 
         while True:
             self._monte_carlo_tree_search(state)
@@ -143,13 +142,14 @@ class CustomPlayer(DataPlayer):
             state = state.result(random.choice(state.actions()))
 
     def _mcts_backprop(self, utility, node: StateNode):
+        leaf_player_id = node.player_id
         while node:
             node.plays += 1
-
             if utility == 0:
                 node.wins += .5
-            elif utility > 0 and node.player_id == self.player_id:
-                node.wins += 1
+            else:
+                if utility < 0 and node.player_id != leaf_player_id or utility > 0 and node.player_id == leaf_player_id:
+                    node.wins += 1
 
             node = node.get_parent()
 
