@@ -16,10 +16,16 @@ class StateNode:
         self.wins = 0
         self.plays = 0
 
-    def create_child(self, state: Isolation, action) -> 'StateNode':
-        child = StateNode(state, self, action)
+    def create_child(self, state: Isolation, causing_action) -> 'StateNode':
+        child = StateNode(state, self, causing_action)
         self._children.append(child)
         return child
+
+    def get_children(self) -> List['StateNode']:
+        return tuple(self._children) # Make immutable.
+
+    def clear_children(self):
+        self._children = []
 
     def get_causing_action(self):
         return self._causing_action
@@ -30,8 +36,6 @@ class StateNode:
     def get_parent(self) -> 'StateNode':
         return self._parent
 
-    def get_children(self) -> List['StateNode']:
-        return tuple(self._children) # Make immutable.
 
 class CustomPlayer(DataPlayer):
     """ Implement your own agent to play knight's Isolation
@@ -67,7 +71,10 @@ class CustomPlayer(DataPlayer):
         #     self.queue.put(best_action_so_far)
         #     depth += 1
 
-        if self.context: self.tree = self.context
+        if not self.context: self.context = self.tree
+        else: self.tree = self.context
+        print(len(self.tree.keys()))
+
         while True:
             self._monte_carlo_tree_search(state)
             children = self.tree[state].get_children()
@@ -87,13 +94,15 @@ class CustomPlayer(DataPlayer):
         else:  # Create root node.
             state_node = StateNode(state, None, None)
             self.tree[state] = state_node
-            self.context = self.tree
         return state_node
 
     def _mcts_selection(self, state_node: StateNode) -> StateNode:
         while True:
             children = state_node.get_children()
             if children:
+                if not len(children) == state_node.get_state().actions():
+                    state_node.clear_children()
+                    return state_node
                 zero_play_child = None
                 for child in children:
                     if child.plays == 0:
@@ -116,17 +125,16 @@ class CustomPlayer(DataPlayer):
                 best_child = child
         return best_child
 
-    def _mcts_expansion(self, parent_node: StateNode) -> StateNode:
-        if parent_node.get_state().terminal_test(): return parent_node
-        children = self._create_children(parent_node)
+    def _mcts_expansion(self, node: StateNode) -> StateNode:
+        if node.get_state().terminal_test(): return node
+        children = self._create_children(node)
         return random.choice(children)
 
     def _create_children(self, parent_node: StateNode):
         for action in parent_node.get_state().actions():
-            new_state = parent_node.get_state().result(action)
-            child_node = parent_node.create_child(new_state, action)
-            self.tree[new_state] = child_node
-            self.context = self.tree
+            child_state = parent_node.get_state().result(action)
+            child_node = parent_node.create_child(child_state, action)
+            self.tree[child_state] = child_node
         return parent_node.get_children()
 
     def _mcts_simulation(self, state: Isolation):
