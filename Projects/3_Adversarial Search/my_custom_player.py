@@ -1,4 +1,5 @@
 import random
+from time import time
 
 from isolation import Isolation
 from isolation.isolation import Action
@@ -6,18 +7,19 @@ from sample_players import DataPlayer
 from typing import *
 
 class StateNode:
-    def __init__(self, state: Isolation, previous_node, causing_action):
+    def __init__(self, state: Isolation, previous_node: 'StateNode', causing_action):
         self._state = state
-
         self._parent = previous_node
-        if self._parent:
-            previous_node._children.append(self)
-
         self._causing_action = causing_action
         self._children = []
-        self.player = state.player()
+        self.player_id = state.player()
         self.wins = 0
         self.plays = 0
+
+    def create_child(self, state: Isolation, action) -> 'StateNode':
+        child = StateNode(state, self, action)
+        self._children.append(child)
+        return child
 
     def get_causing_action(self):
         return self._causing_action
@@ -25,10 +27,10 @@ class StateNode:
     def get_state(self):
         return self._state
 
-    def get_parent(self):
+    def get_parent(self) -> 'StateNode':
         return self._parent
 
-    def get_children(self):
+    def get_children(self) -> List['StateNode']:
         return tuple(self._children) # Make immutable.
 
 class CustomPlayer(DataPlayer):
@@ -46,7 +48,7 @@ class CustomPlayer(DataPlayer):
 
     - You can pass state forward to your agent on the next turn by assigning
       any pickleable object to the self.context attribute.
-    **********************************************************************
+    *****************************add_child*****************************************
     """
     def __init__(self, player_id):
         super().__init__(player_id)
@@ -68,16 +70,16 @@ class CustomPlayer(DataPlayer):
         if self.context: self.tree = self.context
         while True:
             self._monte_carlo_tree_search(state)
-            most_played_node = max(self.tree[state].get_children(), key=lambda e: e.plays)
+            children = self.tree[state].get_children()
+            most_played_node = max(children, key=lambda e: e.plays)
             self.queue.put(most_played_node.get_causing_action())
-            self.context = self.tree
 
     def _monte_carlo_tree_search(self, state: Isolation):
         state_node = self._get_state_node(state)
         leaf_node = self._mcts_selection(state_node)
-        child_node = self._mcts_expansion(leaf_node) if not leaf_node.get_state().terminal_test() else leaf_node
-        utility = self._mcts_simulation(child_node.get_state())
-        self._mcts_backprop(utility, child_node)
+        leaf_or_child = self._mcts_expansion(leaf_node)
+        utility = self._mcts_simulation(leaf_or_child.get_state())
+        self._mcts_backprop(utility, leaf_or_child)
 
     def _get_state_node(self, state):
         if state in self.tree.keys():
@@ -85,22 +87,29 @@ class CustomPlayer(DataPlayer):
         else:  # Create root node.
             state_node = StateNode(state, None, None)
             self.tree[state] = state_node
+            self.context = self.tree
         return state_node
 
     def _mcts_selection(self, state_node: StateNode) -> StateNode:
         while True:
             children = state_node.get_children()
             if children:
-                state_node = random.choice(state_node.get_children())
+                state_node = next((child for child in children if child.plays == 0), random.choice(children))
             else:
                 return state_node
 
     def _mcts_expansion(self, parent_node: StateNode) -> StateNode:
-        a = random.choice(parent_node.get_state().actions())
-        new_state = parent_node.get_state().result(a)
-        child_node = StateNode(new_state, parent_node, a)
-        self.tree[new_state] = child_node
-        return child_node
+        if parent_node.get_state().terminal_test(): return parent_node
+        children = self._create_children(parent_node)
+        return random.choice(children)
+
+    def _create_children(self, parent_node: StateNode):
+        for action in parent_node.get_state().actions():
+            new_state = parent_node.get_state().result(action)
+            child_node = parent_node.create_child(new_state, action)
+            self.tree[new_state] = child_node
+            self.context = self.tree
+        return parent_node.get_children()
 
     def _mcts_simulation(self, state: Isolation):
         while True:
@@ -113,7 +122,7 @@ class CustomPlayer(DataPlayer):
 
             if utility == 0:
                 node.wins += .5
-            elif utility > 0 and node.player == self.player_id:
+            elif utility > 0 and node.player_id == self.player_id:
                 node.wins += 1
 
             node = node.get_parent()
