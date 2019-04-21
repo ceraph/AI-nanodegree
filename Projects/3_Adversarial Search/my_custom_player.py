@@ -21,7 +21,7 @@ class StateNode:
         self._children = []
         self._level = 0 if parent is None else parent.get_level() + 1
         self._player_id = player_id
-        self.wins = 0
+        self.wins = 0.0
         self.plays = 0
 
     def create_child(self, state: Isolation, causing_action, player_id) -> 'StateNode':
@@ -73,6 +73,7 @@ class CustomPlayer(DataPlayer):
     """
     def __init__(self, player_id):
         super().__init__(player_id)
+        self.root_node_for_turn = None
         self.data_from_last_round = {}
         self.tree = {}
 
@@ -91,65 +92,51 @@ class CustomPlayer(DataPlayer):
             self.data_from_last_round = self.context
 
         self.tree = self.data_from_last_round[TREE]
+        self._print_tree()
 
         corrupted_parent = self.data_from_last_round[CORRUPTED_PARENT]
         if corrupted_parent:
             corrupted_parent.clear_children()
             self.data_from_last_round[CORRUPTED_PARENT] = None
 
-        self._print_tree()
-
+        self.root_node_for_turn = self._get_state_node(state)
+        # print(len(self.tree.keys()))
         while True:
-            self._monte_carlo_tree_search(state)
+            self._monte_carlo_tree_search(self.root_node_for_turn)
             children = self.tree[state].get_children()
             most_played_node = max(children, key=lambda e: e.plays)
             self.queue.put(most_played_node.get_causing_action())
 
-    def _print_tree(self):
-        root = self.data_from_last_round[ROOT]  # type: StateNode
-        if not root: return
-
-        stack = [root]
-        while stack:
-            node = stack.pop()
-            print(node)
-
-            children = node.get_children()
-            if children:
-                stack.extend(children)
-            else:
-                print(node)
-
-    def _monte_carlo_tree_search(self, state: Isolation):
-        state_node = self._get_state_node(state)
-        leaf_node = self._mcts_selection(state_node)
-        leaf_or_child = self._mcts_expansion(leaf_node)
-        utility = self._mcts_simulation(leaf_or_child.get_state())
-        self._mcts_backprop(utility, leaf_or_child)
-
     def _get_state_node(self, state):
         if state in self.tree.keys():
             state_node = self.tree[state]
-        else:  # Create root node.
-            state_node = StateNode(state, None, None, self.player_id)
-            self.data_from_last_round['root'] = state_node
-            self.tree[state] = state_node
+        else:
+            state_node = self._create_root(state)
         return state_node
 
-    def _mcts_selection(self, state_node: StateNode) -> StateNode:
+    def _monte_carlo_tree_search(self, node: StateNode):
+        leaf_node = self._mcts_selection(node)
+        leaf_or_child = self._mcts_expansion(leaf_node)
+        utility = self._mcts_simulation(leaf_or_child.get_state(), leaf_or_child.get_player_id())
+        self._mcts_backprop(utility, leaf_or_child)
+
+    def _create_root(self, state):
+        if self.data_from_last_round[ROOT]: raise Exception
+        state_node = StateNode(state, None, None, self.player_id)
+        self.data_from_last_round[ROOT] = state_node
+        self.tree[state] = state_node
+        return state_node
+
+    def _mcts_selection(self, node: StateNode) -> StateNode:
         while True:
-            children = state_node.get_children()
+            children = node.get_children()
             if children:
-                if len(children) != len(state_node.get_state().actions()): raise Exception
-                zero_play_child = None
+                if len(children) != len(node.get_state().actions()): raise Exception
                 for child in children:
-                    if child.plays == 0:
-                        zero_play_child = child
-                        break
-                if zero_play_child: state_node = zero_play_child
-                else: state_node = self._ucb1_algo(children)
+                    if child.plays == 0: return child
+                node = self._ucb1_algo(children)
             else:
-                return state_node
+                return node
 
     def _ucb1_algo(self, children):
         c = sqrt(2)
@@ -165,9 +152,9 @@ class CustomPlayer(DataPlayer):
             best_value = min(values, key=lambda e: e[0])
         return best_value[1]
 
-    def _mcts_expansion(self, node: StateNode) -> StateNode:
-        if node.get_state().terminal_test(): return node
-        children = self._create_children(node)
+    def _mcts_expansion(self, leaf_node: StateNode) -> StateNode:
+        if leaf_node.get_state().terminal_test(): return leaf_node
+        children = self._create_children(leaf_node)
         return random.choice(children)
 
     def _create_children(self, parent_node: StateNode):
@@ -179,15 +166,15 @@ class CustomPlayer(DataPlayer):
         self.data_from_last_round[CORRUPTED_PARENT] = None
         return parent_node.get_children()
 
-    def _mcts_simulation(self, state: Isolation) -> Union[Isolation, float]:
+    def _mcts_simulation(self, state: Isolation, leaf_player_id) -> float:
         while True:
-            if state.terminal_test(): return state.utility(self.player_id)
+            if state.terminal_test(): return state.utility(leaf_player_id)
             state = state.result(random.choice(state.actions()))
 
-    @staticmethod
-    def _mcts_backprop(utility: float, node: StateNode):
+    def _mcts_backprop(self, utility: float, node: StateNode):
         leaf_player_id = node.get_player_id()  # type: int
         while node:
+            assert(node.plays, sum([child.plays for child in node.get_children()]))
             node.plays += 1
             if utility == 0:
                 node.wins += .5
@@ -196,7 +183,23 @@ class CustomPlayer(DataPlayer):
                    utility > 0 and node.get_player_id() == leaf_player_id:
                     node.wins += 1
 
-            node = node.get_parent()
+            if node == self.root_node_for_turn:
+                return
+            else:
+                node = node.get_parent()
+
+    def _print_tree(self):
+        root = self.data_from_last_round[ROOT]  # type: StateNode
+        if not root: return
+
+        stack = [root]
+        while stack:
+            node = stack.pop()
+            print(node)
+
+            children = node.get_children()
+            if children:
+                stack.extend(children)
 
     def _minimax_with_alpha_beta_pruning(self, state, depth, alpha, beta) -> Action:
 
