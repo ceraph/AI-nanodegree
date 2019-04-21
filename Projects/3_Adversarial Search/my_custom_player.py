@@ -1,3 +1,4 @@
+import copy
 import random
 from math import log, sqrt
 
@@ -5,6 +6,8 @@ from isolation import Isolation
 from isolation.isolation import Action
 from sample_players import DataPlayer
 from typing import *
+
+ASSUMED_NEXT_STATES = 'assumed_next_states'
 
 ROOT = 'root'
 
@@ -71,47 +74,65 @@ class CustomPlayer(DataPlayer):
       any pickleable object to the self.context attribute.
     *****************************add_child*****************************************
     """
+    class Data:
+        def __init__(self):
+            self.tree = {}
+            self.root = None
+            self.assumed_next_states = []
+    
     def __init__(self, player_id):
         super().__init__(player_id)
-        self.root_node_for_turn = None
-        self.data_from_last_round = {}
-        self.tree = {}
+        self._data = self.Data()
+        self._root_node_for_turn = None
 
     def get_action(self, state: Isolation):
-        # Do something at least.
-        self.queue.put(random.choice(state.actions()))
-
+        # self.queue.put(random.choice(state.actions()))  # Do something at least.
         # self.minimax_iterative_deepening(state)
 
-        if not self.context:
-            self.context = self.data_from_last_round
-            self.data_from_last_round[CORRUPTED_PARENT] = None
-            self.data_from_last_round[TREE] = {}
-            self.data_from_last_round[ROOT] = None
-        else:
-            self.data_from_last_round = self.context
+        if self.context:
+            self._data = copy.deepcopy(self.context)
 
-        self.tree = self.data_from_last_round[TREE]
-        self._print_tree()
+            states = self._data.assumed_next_states
+            assert state.board in [state.board for state in states], states
 
-        corrupted_parent = self.data_from_last_round[CORRUPTED_PARENT]
-        if corrupted_parent:
-            corrupted_parent.clear_children()
-            self.data_from_last_round[CORRUPTED_PARENT] = None
+            assert len(self._data.tree.keys()) > 0
 
-        self.root_node_for_turn = self._get_state_node(state)
+        self._root_node_for_turn = self._get_state_node(state)
+        action = self._choose_action()
+        self.queue.put(action) # Do something at least.
+
+        self._print_data_tree()
+        assert self._root_node_for_turn.get_player_id() == self.player_id
         # print(len(self.tree.keys()))
         while True:
-            self._monte_carlo_tree_search(self.root_node_for_turn)
-            children = self.tree[state].get_children()
-            most_played_node = max(children, key=lambda e: e.plays)
-            self.queue.put(most_played_node.get_causing_action())
+            self._monte_carlo_tree_search(self._root_node_for_turn)
+            action = self._choose_action()
+            self.queue.put(action)
+            self.context = copy.deepcopy(self._data)
+            
+    def _choose_action(self):
+        children = self._root_node_for_turn.get_children()
+        if not children:
+            self._data.assumed_next_states = self._root_node_for_turn.get_state().actions()
+            return random.choice(self._root_node_for_turn.get_state().actions())
+        most_played_node = max(children, key=lambda e: e.plays)
+        action = most_played_node.get_causing_action()
+        self._data.assumed_next_states = [child.get_state() for child in most_played_node.get_children()]
+        return action
 
     def _get_state_node(self, state):
-        if state in self.tree.keys():
-            state_node = self.tree[state]
+        if state in self._data.tree.keys():
+            state_node = self._data.tree[state]
         else:
             state_node = self._create_root(state)
+        return state_node
+
+    def _create_root(self, state: Isolation):
+        assert state.ply_count <= 1, "Ply: " + str(state.ply_count)
+        assert self._data.root is None
+        state_node = StateNode(state, None, None, self.player_id)
+        self._data.root = state_node
+        self._data.tree[state] = state_node
         return state_node
 
     def _monte_carlo_tree_search(self, node: StateNode):
@@ -120,20 +141,14 @@ class CustomPlayer(DataPlayer):
         utility = self._mcts_simulation(leaf_or_child.get_state(), leaf_or_child.get_player_id())
         self._mcts_backprop(utility, leaf_or_child)
 
-    def _create_root(self, state):
-        if self.data_from_last_round[ROOT]: raise Exception
-        state_node = StateNode(state, None, None, self.player_id)
-        self.data_from_last_round[ROOT] = state_node
-        self.tree[state] = state_node
-        return state_node
-
     def _mcts_selection(self, node: StateNode) -> StateNode:
         while True:
             children = node.get_children()
             if children:
-                if len(children) != len(node.get_state().actions()): raise Exception
+                assert len(children) == len(node.get_state().actions())
                 for child in children:
                     if child.plays == 0: return child
+                assert not [child for child in children if child.plays < 1]
                 node = self._ucb1_algo(children)
             else:
                 return node
@@ -158,12 +173,10 @@ class CustomPlayer(DataPlayer):
         return random.choice(children)
 
     def _create_children(self, parent_node: StateNode):
-        self.data_from_last_round[CORRUPTED_PARENT] = parent_node
         for action in parent_node.get_state().actions():
             child_state = parent_node.get_state().result(action)
             child_node = parent_node.create_child(child_state, action, parent_node.get_player_id() ^ 1)
-            self.tree[child_state] = child_node
-        self.data_from_last_round[CORRUPTED_PARENT] = None
+            self._data.tree[child_state] = child_node
         return parent_node.get_children()
 
     def _mcts_simulation(self, state: Isolation, leaf_player_id) -> float:
@@ -183,13 +196,13 @@ class CustomPlayer(DataPlayer):
                    utility > 0 and node.get_player_id() == leaf_player_id:
                     node.wins += 1
 
-            if node == self.root_node_for_turn:
+            if node == self._root_node_for_turn:
                 return
             else:
                 node = node.get_parent()
 
-    def _print_tree(self):
-        root = self.data_from_last_round[ROOT]  # type: StateNode
+    def _print_data_tree(self):
+        root = self._data.root  # type: StateNode
         if not root: return
 
         stack = [root]
@@ -200,6 +213,15 @@ class CustomPlayer(DataPlayer):
             children = node.get_children()
             if children:
                 stack.extend(children)
+
+    def minimax_iterative_deepening(self, state):
+        alpha = float("-inf")
+        beta = float("inf")
+        depth = 1
+        while True:
+            best_action_so_far = self._minimax_with_alpha_beta_pruning(state, depth, alpha, beta)
+            self.queue.put(best_action_so_far)
+            depth += 1
 
     def _minimax_with_alpha_beta_pruning(self, state, depth, alpha, beta) -> Action:
 
