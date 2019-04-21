@@ -6,23 +6,31 @@ from isolation.isolation import Action
 from sample_players import DataPlayer
 from typing import *
 
+ROOT = 'root'
+
+TREE = 'tree'
+
+CORRUPTED_PARENT = 'corrupted_parent'
+
+
 class StateNode:
-    def __init__(self, state: Isolation, previous_node: 'StateNode', causing_action):
+    def __init__(self, state: Isolation, parent: Union['StateNode',None], causing_action, player_id):
         self._state = state
-        self._parent = previous_node
+        self._parent = parent
         self._causing_action = causing_action
         self._children = []
-        self.player_id = state.player()
+        self._level = 0 if parent is None else parent.get_level() + 1
+        self._player_id = player_id
         self.wins = 0
         self.plays = 0
 
-    def create_child(self, state: Isolation, causing_action) -> 'StateNode':
-        child = StateNode(state, self, causing_action)
+    def create_child(self, state: Isolation, causing_action, player_id) -> 'StateNode':
+        child = StateNode(state, self, causing_action, player_id)
         self._children.append(child)
         return child
 
-    def get_children(self) -> List['StateNode']:
-        return tuple(self._children) # Make immutable.
+    def get_children(self) -> Tuple['StateNode', ...]:
+        return tuple(self._children)  # Make immutable.
 
     def clear_children(self):
         self._children = []
@@ -35,6 +43,15 @@ class StateNode:
 
     def get_parent(self) -> 'StateNode':
         return self._parent
+
+    def get_player_id(self) -> int:
+        return self._player_id
+
+    def get_level(self):
+        return self._level
+
+    def __str__(self):
+        return "\t"*self._level + "{}/{}[{}]".format(self.wins, self.plays, self._player_id)
 
 
 class CustomPlayer(DataPlayer):
@@ -56,29 +73,52 @@ class CustomPlayer(DataPlayer):
     """
     def __init__(self, player_id):
         super().__init__(player_id)
+        self.data_from_last_round = {}
         self.tree = {}
 
     def get_action(self, state: Isolation):
         # Do something at least.
         self.queue.put(random.choice(state.actions()))
 
-        # Iterative Deepening
-        # alpha = float("-inf")
-        # beta = float("inf")
-        # depth = 1
-        # while True:
-        #     best_action_so_far = self._minimax_with_alpha_beta_pruning(state, depth, alpha, beta)
-        #     self.queue.put(best_action_so_far)
-        #     depth += 1
+        # self.minimax_iterative_deepening(state)
 
-        if not self.context: self.context = self.tree
-        else: self.tree = self.context
+        if not self.context:
+            self.context = self.data_from_last_round
+            self.data_from_last_round[CORRUPTED_PARENT] = None
+            self.data_from_last_round[TREE] = {}
+            self.data_from_last_round[ROOT] = None
+        else:
+            self.data_from_last_round = self.context
+
+        self.tree = self.data_from_last_round[TREE]
+
+        corrupted_parent = self.data_from_last_round[CORRUPTED_PARENT]
+        if corrupted_parent:
+            corrupted_parent.clear_children()
+            self.data_from_last_round[CORRUPTED_PARENT] = None
+
+        self._print_tree()
 
         while True:
             self._monte_carlo_tree_search(state)
             children = self.tree[state].get_children()
             most_played_node = max(children, key=lambda e: e.plays)
             self.queue.put(most_played_node.get_causing_action())
+
+    def _print_tree(self):
+        root = self.data_from_last_round[ROOT]  # type: StateNode
+        if not root: return
+
+        stack = [root]
+        while stack:
+            node = stack.pop()
+            print(node)
+
+            children = node.get_children()
+            if children:
+                stack.extend(children)
+            else:
+                print(node)
 
     def _monte_carlo_tree_search(self, state: Isolation):
         state_node = self._get_state_node(state)
@@ -91,7 +131,8 @@ class CustomPlayer(DataPlayer):
         if state in self.tree.keys():
             state_node = self.tree[state]
         else:  # Create root node.
-            state_node = StateNode(state, None, None)
+            state_node = StateNode(state, None, None, self.player_id)
+            self.data_from_last_round['root'] = state_node
             self.tree[state] = state_node
         return state_node
 
@@ -99,9 +140,7 @@ class CustomPlayer(DataPlayer):
         while True:
             children = state_node.get_children()
             if children:
-                if len(children) != len(state_node.get_state().actions()):
-                    state_node.clear_children()
-                    return state_node
+                if len(children) != len(state_node.get_state().actions()): raise Exception
                 zero_play_child = None
                 for child in children:
                     if child.plays == 0:
@@ -115,7 +154,7 @@ class CustomPlayer(DataPlayer):
     def _ucb1_algo(self, children):
         c = sqrt(2)
         log_parent_plays = log(children[0].get_parent().plays)
-        is_own_move = children[0].player_id == self.player_id
+        is_own_move = children[0].get_player_id() == self.player_id
         values = []
         for child in children:
             v = child.wins/child.plays + c * sqrt(log_parent_plays / child.plays)
@@ -132,25 +171,29 @@ class CustomPlayer(DataPlayer):
         return random.choice(children)
 
     def _create_children(self, parent_node: StateNode):
+        self.data_from_last_round[CORRUPTED_PARENT] = parent_node
         for action in parent_node.get_state().actions():
             child_state = parent_node.get_state().result(action)
-            child_node = parent_node.create_child(child_state, action)
+            child_node = parent_node.create_child(child_state, action, parent_node.get_player_id() ^ 1)
             self.tree[child_state] = child_node
+        self.data_from_last_round[CORRUPTED_PARENT] = None
         return parent_node.get_children()
 
-    def _mcts_simulation(self, state: Isolation):
+    def _mcts_simulation(self, state: Isolation) -> Union[Isolation, float]:
         while True:
             if state.terminal_test(): return state.utility(self.player_id)
             state = state.result(random.choice(state.actions()))
 
-    def _mcts_backprop(self, utility, node: StateNode):
-        leaf_player_id = node.player_id
+    @staticmethod
+    def _mcts_backprop(utility: float, node: StateNode):
+        leaf_player_id = node.get_player_id()  # type: int
         while node:
             node.plays += 1
             if utility == 0:
                 node.wins += .5
             else:
-                if utility < 0 and node.player_id != leaf_player_id or utility > 0 and node.player_id == leaf_player_id:
+                if utility < 0 and node.get_player_id() != leaf_player_id or \
+                   utility > 0 and node.get_player_id() == leaf_player_id:
                     node.wins += 1
 
             node = node.get_parent()
@@ -190,4 +233,3 @@ class CustomPlayer(DataPlayer):
         own_liberties = state.liberties(own_loc)
         opp_liberties = state.liberties(opp_loc)
         return len(own_liberties) - len(opp_liberties)
-
