@@ -8,11 +8,11 @@ from isolation import Isolation
 from isolation.isolation import Action
 from sample_players import DataPlayer
 
-TREE_PICKLE = 'monte_carlo_search_tree.pickle'
-BUFFER_TIME = .017
+TREE_PICKLE = 'mcts_tree.pickle'
+BUFFER_TIME = .025
 TIME_LIMIT_IN_SEC = .150 - BUFFER_TIME
 OWN_TURNS_TO_LOOK_AHEAD = 4
-C_VALUE = 1.4 # 0.7 in MANGO
+C_VALUE = 0.7 # 0.7 in MANGO
 
 
 class StateNode:
@@ -49,96 +49,18 @@ class StateNode:
         return tree
 
 
-class CustomPlayer(DataPlayer):
-    """ Implement your own agent to play knight's Isolation
+class MonteCarloSearcher():
+    __slots__ = ('_tree', '_root_node')
 
-    The get_action() method is the only required method for this project.
-    You can modify the interface for get_action by adding *named parameters
-    with default values*, but the function MUST remain compatible with the
-    default interface.logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+    def __init__(self, tree, root_node):
+        self._tree = tree
+        self._root_node = root_node
 
-    **********************************************************************
-    NOTES:
-    - The test cases will NOT be run on a machine with GPU access, nor be
-      suitable for using any other machine learning techniques.
+    def get_tree(self):
+        return self._tree
 
-    - You can pass state forward to your agent on the next turn by assigning
-      any pickleable object to the self.context attribute.
-    **********************************************************************
-    """
-
-    def __init__(self, player_id):
-        super().__init__(player_id)
-        self._tree = {}
-        self._root_node_for_turn = None
-
-    def get_action(self, state: Isolation):
-        start_time = time()
-        is_first_move = state.ply_count < 2
-
-        if not is_first_move:
-            self._load_tree()
-            assert len(self._tree.keys()) > 0
-
-        # Don't waste calculation time on initial step.
-        if is_first_move:
-            action = random.choice(state.actions())
-            self.queue.put(action)
-            first_enemy_state = state.result(action)
-            self._root_node_for_turn = self._get_state_node(first_enemy_state)
-        else:
-            self._root_node_for_turn = self._get_state_node(state)
-
-        runs = 0
-        while time() - start_time < TIME_LIMIT_IN_SEC:
-            self._monte_carlo_tree_search(self._root_node_for_turn)
-            runs += 1
-            # self.minimax_iterative_deepening(state)
-
-        if not is_first_move:
-            node = self._best_node()
-            self.queue.put(node.causing_action)
-            print("Finished turn {} at {:.3}s. Winning node (less wins is better): {}" \
-                  .format(state.ply_count, time() - start_time, node))
-            print("Nodes to choose from: ", end='')
-            for child in node.parent.children:
-                print(child, end=', ')
-            print()
-
-        print("MCTS ran {} times. Current player node: {}".format(runs, self._root_node_for_turn))
-        self._save_tree()
-        print("Saved tree in {:.3}s".format(time() - start_time))
-        print()
-
-    def _load_tree(self):
-        with open(TREE_PICKLE, 'rb') as f:
-            self._tree = pickle.load(f)
-
-    def _save_tree(self):
-        with open(TREE_PICKLE, 'wb') as f:
-            # Pickle the 'data' dictionary using the highest protocol available.
-            tree = StateNode.create_state_tree(self._root_node_for_turn)
-            pickle.dump(tree, f, pickle.HIGHEST_PROTOCOL)
-
-    def _best_node(self) -> Action:
-        children = self._root_node_for_turn.children
-        return max(children, key=lambda e: e.plays)
-
-    def _get_state_node(self, state):
-        if state in self._tree.keys():
-            state_node = self._tree[state]
-        else:
-            state_node = self._create_root(state)
-        return state_node
-
-    def _create_root(self, state: Isolation):
-        assert state.ply_count <= 2, "Ply: " + str(state.ply_count)
-        state_node = StateNode(state, None, None)
-        self._tree[state] = state_node
-        return state_node
-
-    def _monte_carlo_tree_search(self, node: StateNode):
-        leaf_node = self._mcts_selection(node)
+    def iterate_once(self):
+        leaf_node = self._mcts_selection(self._root_node)
         leaf_or_child = self._mcts_expansion(leaf_node)
         utility = self._mcts_simulation(leaf_or_child.state, leaf_or_child.state.player())
         self._mcts_backprop(utility, leaf_or_child)
@@ -151,7 +73,7 @@ class CustomPlayer(DataPlayer):
                 for child in children:
                     if child.plays == 0: return child
 
-                if node.plays < 15: # Original Paper had 30 in its game.
+                if node.plays < 30: # Original Paper had 30 in its game.
                     node = random.choice(children)
                 else:
                     node = self._ucb1_algo(children)
@@ -194,13 +116,109 @@ class CustomPlayer(DataPlayer):
                 p = node.state.player()
                 # The leaf node should lose from its parent's perspective.
                 if utility < 0 and p == leaf_player or \
-                   utility > 0 and p != leaf_player:
+                        utility > 0 and p != leaf_player:
                     node.wins += 1
 
-            if node == self._root_node_for_turn:
+            if node == self._root_node:
                 return
             else:
                 node = node.parent
+
+
+class CustomPlayer(DataPlayer):
+    """ Implement your own agent to play knight's Isolation
+
+    The get_action() method is the only required method for this project.
+    You can modify the interface for get_action by adding *named parameters
+    with default values*, but the function MUST remain compatible with the
+    default interface.logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+
+    **********************************************************************
+    NOTES:
+    - The test cases will NOT be run on a machine with GPU access, nor be
+      suitable for using any other machine learning techniques.
+
+    - You can pass state forward to your agent on the next turn by assigning
+      any pickleable object to the self.context attribute.
+    **********************************************************************
+    """
+
+    def __init__(self, player_id):
+        super().__init__(player_id)
+        self._tree = {}
+        self._root_node_for_turn = None
+
+    def get_action(self, state: Isolation):
+        start_time = time()
+        is_first_move = state.ply_count < 2
+
+        if not is_first_move:
+            self._load_tree()
+            assert len(self._tree.keys()) > 0
+
+        # Don't waste calculation time on initial step. Start simulating the next one.
+        if is_first_move:
+            action = random.choice(state.actions())
+            self.queue.put(action)
+            first_enemy_state = state.result(action)
+            self._root_node_for_turn = self._get_state_node(first_enemy_state)
+        else:
+            self._root_node_for_turn = self._get_state_node(state)
+
+        runs = 0
+        mcts = MonteCarloSearcher(self._tree, self._root_node_for_turn)
+        while time() - start_time < TIME_LIMIT_IN_SEC:
+            runs += 1
+            mcts.iterate_once()
+            # self.minimax_iterative_deepening(state)
+
+        self._tree = mcts.get_tree()
+        if not is_first_move:
+            self._select_action(start_time, state)
+
+        print("MCTS ran {} times. Current player node: {}".format(runs, self._root_node_for_turn))
+
+        self._save_tree()
+        print("Saved tree in {:.3}s".format(time() - start_time))
+        print()
+
+    def _select_action(self, start_time, state):
+        node = self._most_played_node()
+        self.queue.put(node.causing_action)
+
+        print("Finished turn {} at {:.3}s. Winning node (less wins is better): {}" \
+              .format(state.ply_count, time() - start_time, node))
+        print("Nodes to choose from: ", end='')
+        for child in node.parent.children:
+            print(child, end=', ')
+        print()
+
+    def _load_tree(self):
+        with open(TREE_PICKLE, 'rb') as f:
+            self._tree = pickle.load(f)
+
+    def _save_tree(self):
+        with open(TREE_PICKLE, 'wb') as f:
+            # Pickle the 'data' dictionary using the highest protocol available.
+            tree = StateNode.create_state_tree(self._root_node_for_turn)
+            pickle.dump(tree, f, pickle.HIGHEST_PROTOCOL)
+
+    def _most_played_node(self) -> Action:
+        children = self._root_node_for_turn.children
+        return max(children, key=lambda e: e.plays)
+
+    def _get_state_node(self, state):
+        if state in self._tree.keys():
+            state_node = self._tree[state]
+        else:
+            state_node = self._create_root(state)
+        return state_node
+
+    def _create_root(self, state: Isolation):
+        assert state.ply_count <= 2, "Ply: " + str(state.ply_count)
+        state_node = StateNode(state, None, None)
+        self._tree[state] = state_node
+        return state_node
 
     def _print_data_tree(self):
         stack = [self._root_node_for_turn]
