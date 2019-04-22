@@ -1,20 +1,18 @@
-import logging
 import pickle
 import random
-import sys
 from math import log, sqrt
 from time import time
+from typing import *
 
 from isolation import Isolation
 from isolation.isolation import Action
 from sample_players import DataPlayer
-from typing import *
 
 TREE_PICKLE = 'monte_carlo_search_tree.pickle'
-BUFFER_TIME = .002
+BUFFER_TIME = .017
 TIME_LIMIT_IN_SEC = .150 - BUFFER_TIME
 OWN_TURNS_TO_LOOK_AHEAD = 4
-C_VALUE = 1.4
+C_VALUE = 1.4 # 0.7 in MANGO
 
 
 class StateNode:
@@ -107,7 +105,7 @@ class CustomPlayer(DataPlayer):
                 print(child, end=', ')
             print()
 
-        print("MCTS ran {} times. Current player: {}".format(runs, self.player_id))
+        print("MCTS ran {} times. Current player node: {}".format(runs, self._root_node_for_turn))
         self._save_tree()
         print("Saved tree in {:.3}s".format(time() - start_time))
         print()
@@ -162,15 +160,11 @@ class CustomPlayer(DataPlayer):
 
     def _ucb1_algo(self, children):
         log_parent_plays = log(children[0].parent.plays)
-        is_own_move = children[0].state.player() == self.player_id
         values = []
         for child in children:
             v = child.wins/child.plays + C_VALUE * sqrt(log_parent_plays / child.plays)
             values.append((v, child))
-        if is_own_move:
-            best_value = max(values, key=lambda e: e[0])
-        else:
-            best_value = min(values, key=lambda e: e[0])
+        best_value = max(values, key=lambda e: e[0])
         return best_value[1]
 
     def _mcts_expansion(self, leaf_node: StateNode) -> StateNode:
@@ -198,8 +192,9 @@ class CustomPlayer(DataPlayer):
                 node.wins += .5
             else:
                 p = node.state.player()
-                if utility < 0 and p != leaf_player or \
-                   utility > 0 and p == leaf_player:
+                # The leaf node should lose from its parent's perspective.
+                if utility < 0 and p == leaf_player or \
+                   utility > 0 and p != leaf_player:
                     node.wins += 1
 
             if node == self._root_node_for_turn:
