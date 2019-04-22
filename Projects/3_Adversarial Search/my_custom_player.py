@@ -20,13 +20,23 @@ class StateNode:
         self.wins = 0.0  # type: float
         self.plays = 0  # type: int
 
+    def __str__(self):
+        return "\t"*(self.state.ply_count - 1) + "{}/{}[{}]".format(self.wins, self.plays, self.state.player())
+
     def create_child(self, state: Isolation, causing_action) -> 'StateNode':
         child = StateNode(state, self, causing_action)
         self.children.append(child)
         return child
 
-    def __str__(self):
-        return "\t"*self.state.ply_count + "{}/{}[{}]".format(self.wins, self.plays, self.state.player())
+    @classmethod
+    def create_state_tree(cls, root_node):
+        tree = {}
+        stack = [root_node]
+        while stack:
+            node = stack.pop()
+            tree[node.state] = node
+            stack.extend(node.children)
+        return tree
 
 
 class CustomPlayer(DataPlayer):
@@ -57,27 +67,25 @@ class CustomPlayer(DataPlayer):
 
         if state.ply_count > 1:
             assert self.context
-        if self.context:
             self._tree = self.context
-
             assert len(self._tree.keys()) > 0
 
         self._root_node_for_turn = self._get_state_node(state)
 
-        # self._print_data_tree()
-        print(len(self._tree.keys()))
+        self._print_data_tree()
+        self._tree = StateNode.create_state_tree(self._root_node_for_turn)
+        self._print_data_tree()
+
         start = time()
-        rounds = 0
         while True:
-            rounds += 1
-            # print(rounds, end=' ')
             self._monte_carlo_tree_search(self._root_node_for_turn)
             if time() - start < .145:
                 continue
             action = self._choose_action()
+            print(len(self._tree.keys()))
             self.queue.put(action)
-            print("saved")
             self.context = self._tree
+            print("saved")
 
     def _choose_action(self):
         children = self._root_node_for_turn.children
@@ -171,10 +179,7 @@ class CustomPlayer(DataPlayer):
                 node = node.parent
 
     def _print_data_tree(self):
-        root = self._tree.root  # type: StateNode
-        if not root: return
-
-        stack = [root]
+        stack = [self._root_node_for_turn]
         while stack:
             node = stack.pop()
             print(node)
