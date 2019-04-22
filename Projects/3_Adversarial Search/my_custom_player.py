@@ -10,38 +10,23 @@ from typing import *
 
 
 class StateNode:
-    __slots__ = ('_state', '_parent', '_children', 'wins', 'plays', '_causing_action')
+    __slots__ = ('state', 'parent', 'children', 'wins', 'plays', 'causing_action')
 
-    def __init__(self, state: Isolation, parent: 'StateNode', causing_action):
-        self._state = state
-        self._parent = parent
-        self._children = []
-        self._causing_action = causing_action
-        self.wins = 0.0
-        self.plays = 0
+    def __init__(self, state: Isolation, parent: 'StateNode', causing_action: Action):
+        self.state = state  # type: Isolation
+        self.parent = parent  # type: StateNode
+        self.children = []  # type: List[StateNode]
+        self.causing_action = causing_action  # type: Action
+        self.wins = 0.0  # type: float
+        self.plays = 0  # type: int
 
     def create_child(self, state: Isolation, causing_action) -> 'StateNode':
         child = StateNode(state, self, causing_action)
-        self._children.append(child)
+        self.children.append(child)
         return child
 
-    def get_children(self) -> Tuple['StateNode', ...]:
-        return tuple(self._children)  # Make immutable.
-
-    def clear_children(self):
-        self._children = []
-
-    def get_causing_action(self):
-        return self._causing_action
-
-    def get_state(self):
-        return self._state
-
-    def get_parent(self) -> 'StateNode':
-        return self._parent
-
     def __str__(self):
-        return "\t"*self._state.ply_count + "{}/{}[{}]".format(self.wins, self.plays, self._state.player())
+        return "\t"*self.state.ply_count + "{}/{}[{}]".format(self.wins, self.plays, self.state.player())
 
 
 class CustomPlayer(DataPlayer):
@@ -95,9 +80,9 @@ class CustomPlayer(DataPlayer):
             self.context = self._tree
 
     def _choose_action(self):
-        children = self._root_node_for_turn.get_children()
+        children = self._root_node_for_turn.children
         most_played_node = max(children, key=lambda e: e.plays)
-        action = most_played_node.get_causing_action()
+        action = most_played_node.causing_action
         return action
 
     def _get_state_node(self, state):
@@ -116,15 +101,15 @@ class CustomPlayer(DataPlayer):
     def _monte_carlo_tree_search(self, node: StateNode):
         leaf_node = self._mcts_selection(node)
         leaf_or_child = self._mcts_expansion(leaf_node)
-        utility = self._mcts_simulation(leaf_or_child.get_state(), leaf_or_child.get_state().player())
+        utility = self._mcts_simulation(leaf_or_child.state, leaf_or_child.state.player())
         self._mcts_backprop(utility, leaf_or_child)
 
     def _mcts_selection(self, node: StateNode) -> StateNode:
         while True:
-            children = node.get_children()
+            children = node.children
             if children:
-                assert len(children) == len(node.get_state().actions())
-                if node.get_state().ply_count > 5:
+                assert len(children) == len(node.state.actions())
+                if node.state.ply_count > 5:
                     i = sum([child.plays for child in children])
                     assert node.plays - 1 == i or node.plays == i
                 for child in children:
@@ -139,8 +124,8 @@ class CustomPlayer(DataPlayer):
 
     def _ucb1_algo(self, children):
         c = sqrt(2)
-        log_parent_plays = log(children[0].get_parent().plays)
-        is_own_move = children[0].get_state().player() == self.player_id
+        log_parent_plays = log(children[0].parent.plays)
+        is_own_move = children[0].state.player() == self.player_id
         values = []
         for child in children:
             v = child.wins/child.plays + c * sqrt(log_parent_plays / child.plays)
@@ -152,16 +137,16 @@ class CustomPlayer(DataPlayer):
         return best_value[1]
 
     def _mcts_expansion(self, leaf_node: StateNode) -> StateNode:
-        if leaf_node.get_state().terminal_test(): return leaf_node
+        if leaf_node.state.terminal_test(): return leaf_node
         children = self._create_children(leaf_node)
         return random.choice(children)
 
     def _create_children(self, parent_node: StateNode):
-        for action in parent_node.get_state().actions():
-            child_state = parent_node.get_state().result(action)
+        for action in parent_node.state.actions():
+            child_state = parent_node.state.result(action)
             child_node = parent_node.create_child(child_state, action)
             self._tree[child_state] = child_node
-        return parent_node.get_children()
+        return parent_node.children
 
     def _mcts_simulation(self, state: Isolation, leaf_player_id) -> float:
         while True:
@@ -169,13 +154,13 @@ class CustomPlayer(DataPlayer):
             state = state.result(random.choice(state.actions()))
 
     def _mcts_backprop(self, utility: float, node: StateNode):
-        leaf_player = node.get_state().player()  # type: int
+        leaf_player = node.state.player()  # type: int
         while node:
             node.plays += 1
             if utility == 0:
                 node.wins += .5
             else:
-                p = node.get_state().player()
+                p = node.state.player()
                 if utility < 0 and p != leaf_player or \
                    utility > 0 and p == leaf_player:
                     node.wins += 1
@@ -183,7 +168,7 @@ class CustomPlayer(DataPlayer):
             if node == self._root_node_for_turn:
                 return
             else:
-                node = node.get_parent()
+                node = node.parent
 
     def _print_data_tree(self):
         root = self._tree.root  # type: StateNode
@@ -194,7 +179,7 @@ class CustomPlayer(DataPlayer):
             node = stack.pop()
             print(node)
 
-            children = node.get_children()
+            children = node.children
             if children:
                 stack.extend(children)
 
