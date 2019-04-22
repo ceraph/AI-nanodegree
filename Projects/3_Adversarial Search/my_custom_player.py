@@ -8,7 +8,7 @@ from isolation import Isolation
 from isolation.isolation import Action
 from sample_players import DataPlayer
 
-TREE_PICKLE = 'mcts_tree.pickle'
+TREE_PICKLE = 'data.pickle'
 BUFFER_TIME = .025
 TIME_LIMIT_IN_SEC = .150 - BUFFER_TIME
 OWN_TURNS_TO_LOOK_AHEAD = 4
@@ -143,36 +143,32 @@ class CustomPlayer(DataPlayer):
     **********************************************************************
     """
 
-    def __init__(self, player_id):
-        super().__init__(player_id)
-        self._tree = {}
-        self._root_node_for_turn = None
-
-    def get_action(self, state: Isolation):
+    def get_action(self, state):
         start_time = time()
         is_first_move = state.ply_count < 2
-        self._root_node_for_turn = self._get_state_node(state)
+
+        tree = {}
+        root_node_for_turn = self._get_state_node(state, tree)
 
         if not is_first_move:
-            self._load_tree()
-            assert len(self._tree.keys()) > 0
+            tree = self.data
+            assert len(tree.keys()) > 0
 
         runs = 0
-        mcts = MonteCarloSearcher(self._tree, self._root_node_for_turn)
+        mcts = MonteCarloSearcher(tree, root_node_for_turn)
         while time() - start_time < TIME_LIMIT_IN_SEC:
             runs += 1
             mcts.iterate_once()
-            # self.minimax_iterative_deepening(state)
-        print("MCTS ran {} times. Current player node: {}".format(runs, self._root_node_for_turn))
+        print("MCTS ran {} times. Current player node: {}".format(runs, root_node_for_turn))
 
-        self._tree = mcts.get_tree()
-        self._select_action(start_time, state)
-        self._save_tree()
+        tree = mcts.get_tree()
+        self._select_action(start_time, state, root_node_for_turn)
+        self._savetree(root_node_for_turn)
         print("Saved tree in {:.3}s".format(time() - start_time))
         print()
 
-    def _select_action(self, start_time, state):
-        node = self._most_played_node()
+    def _select_action(self, start_time, state, root_node_for_turn):
+        node = self._most_played_node(root_node_for_turn)
         self.queue.put(node.causing_action)
 
         print("Finished turn {} at {:.3}s. Winning node (less wins is better): {}" \
@@ -182,41 +178,27 @@ class CustomPlayer(DataPlayer):
             print(child, end=', ')
         print()
 
-    def _load_tree(self):
-        with open(TREE_PICKLE, 'rb') as f:
-            self._tree = pickle.load(f)
-
-    def _save_tree(self):
+    def _savetree(self, root_node_for_turn):
         with open(TREE_PICKLE, 'wb') as f:
-            tree = StateNode.create_state_tree(self._root_node_for_turn)
-            pickle.dump(tree, f, pickle.HIGHEST_PROTOCOL)
+            tree = StateNode.create_state_tree(root_node_for_turn)
+            pickle.dump(tree, f)
 
-    def _most_played_node(self) -> Action:
-        children = self._root_node_for_turn.children
+    def _most_played_node(self, root_node_for_turn) -> Action:
+        children = root_node_for_turn.children
         return max(children, key=lambda e: e.plays)
 
-    def _get_state_node(self, state):
-        if state in self._tree.keys():
-            state_node = self._tree[state]
+    def _get_state_node(self, state, tree):
+        if state in tree.keys():
+            state_node = tree[state]
         else:
-            state_node = self._create_root(state)
+            state_node = self._create_root(state, tree)
         return state_node
 
-    def _create_root(self, state: Isolation):
+    def _create_root(self, state: Isolation, tree):
         # assert state.ply_count <= 3, "Ply: " + str(state.ply_count)
         state_node = StateNode(state, None, None)
-        self._tree[state] = state_node
+        tree[state] = state_node
         return state_node
-
-    def _print_data_tree(self):
-        stack = [self._root_node_for_turn]
-        while stack:
-            node = stack.pop()
-            print("\t"*(node.state.ply_count - 1) + node)
-
-            children = node.children
-            if children:
-                stack.extend(children)
 
     def minimax_iterative_deepening(self, state):
         alpha = float("-inf")
