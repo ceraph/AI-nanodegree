@@ -1,4 +1,3 @@
-import pickle
 import random
 from math import log, sqrt
 from time import time
@@ -9,10 +8,10 @@ from isolation.isolation import Action
 from sample_players import DataPlayer
 
 TREE_PICKLE = 'data.pickle'
-BUFFER_TIME = .025
+BUFFER_TIME = .005
 TIME_LIMIT_IN_SEC = .150 - BUFFER_TIME
 OWN_TURNS_TO_LOOK_AHEAD = 4
-C_VALUE = 0.7 # 0.7 in MANGO
+C_VALUE = 0.7  # 0.7 in MANGO
 
 
 class StateNode:
@@ -45,7 +44,7 @@ class StateNode:
             tree[node.state] = node
             if node.state.ply_count <= max_depth:
                 stack.extend(node.children)
-        print("Nodes in tree: {}".format(len(tree.keys())))
+        # print("Nodes in tree: {}".format(len(tree.keys())))
         return tree
 
 
@@ -84,7 +83,7 @@ class MonteCarloSearcher():
         log_parent_plays = log(children[0].parent.plays)
         values = []
         for child in children:
-            v = child.wins/child.plays + C_VALUE * sqrt(log_parent_plays / child.plays)
+            v = child.wins / child.plays + C_VALUE * sqrt(log_parent_plays / child.plays)
             values.append((v, child))
         best_value = max(values, key=lambda e: e[0])
         return best_value[1]
@@ -131,7 +130,7 @@ class CustomPlayer(DataPlayer):
     The get_action() method is the only required method for this project.
     You can modify the interface for get_action by adding *named parameters
     with default values*, but the function MUST remain compatible with the
-    default interface.logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+    default
 
     **********************************************************************
     NOTES:
@@ -145,47 +144,41 @@ class CustomPlayer(DataPlayer):
 
     def get_action(self, state):
         start_time = time()
-        is_first_move = state.ply_count < 2
 
         tree = {}
         root_node_for_turn = self._get_state_node(state, tree)
-
-        if not is_first_move:
-            tree = self.data
-            assert len(tree.keys()) > 0
 
         runs = 0
         mcts = MonteCarloSearcher(tree, root_node_for_turn)
         while time() - start_time < TIME_LIMIT_IN_SEC:
             runs += 1
             mcts.iterate_once()
-        print("MCTS ran {} times. Current player node: {}".format(runs, root_node_for_turn))
+        # print("MCTS ran {} times. Current player node: {}".format(runs, root_node_for_turn))
 
         tree = mcts.get_tree()
         self._select_action(start_time, state, root_node_for_turn)
-        self._savetree(root_node_for_turn)
-        print("Saved tree in {:.3}s".format(time() - start_time))
-        print()
+        # print("Saved tree in {:.3}s".format(time() - start_time))
+        # print()
 
     def _select_action(self, start_time, state, root_node_for_turn):
-        node = self._most_played_node(root_node_for_turn)
-        self.queue.put(node.causing_action)
+        action = self._most_played_node(root_node_for_turn)
+        self.queue.put(action)
 
-        print("Finished turn {} at {:.3}s. Winning node (less wins is better): {}" \
-              .format(state.ply_count, time() - start_time, node))
-        print("Nodes to choose from: ", end='')
-        for child in node.parent.children:
-            print(child, end=', ')
-        print()
-
-    def _savetree(self, root_node_for_turn):
-        with open(TREE_PICKLE, 'wb') as f:
-            tree = StateNode.create_state_tree(root_node_for_turn)
-            pickle.dump(tree, f)
+        # print("Finished turn {} at {:.3}s. Winning node (less wins is better): {}" \
+        #       .format(state.ply_count, time() - start_time, node))
+        # print("Nodes to choose from: ", end='')
+        # for child in node.parent.children:
+        # print(child, end=', ')
+        # print()
 
     def _most_played_node(self, root_node_for_turn) -> Action:
         children = root_node_for_turn.children
-        return max(children, key=lambda e: e.plays)
+        if children:
+            action = max(children, key=lambda e: e.plays).causing_action
+        else:
+            # Needed by udacity submit.
+            action = random.choice(root_node_for_turn.state.actions())
+        return action
 
     def _get_state_node(self, state, tree):
         if state in tree.keys():
