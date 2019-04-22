@@ -151,19 +151,11 @@ class CustomPlayer(DataPlayer):
     def get_action(self, state: Isolation):
         start_time = time()
         is_first_move = state.ply_count < 2
+        self._root_node_for_turn = self._get_state_node(state)
 
         if not is_first_move:
             self._load_tree()
             assert len(self._tree.keys()) > 0
-
-        # Don't waste calculation time on initial step. Start simulating the next one.
-        if is_first_move:
-            action = random.choice(state.actions())
-            self.queue.put(action)
-            first_enemy_state = state.result(action)
-            self._root_node_for_turn = self._get_state_node(first_enemy_state)
-        else:
-            self._root_node_for_turn = self._get_state_node(state)
 
         runs = 0
         mcts = MonteCarloSearcher(self._tree, self._root_node_for_turn)
@@ -171,13 +163,10 @@ class CustomPlayer(DataPlayer):
             runs += 1
             mcts.iterate_once()
             # self.minimax_iterative_deepening(state)
-
-        self._tree = mcts.get_tree()
-        if not is_first_move:
-            self._select_action(start_time, state)
-
         print("MCTS ran {} times. Current player node: {}".format(runs, self._root_node_for_turn))
 
+        self._tree = mcts.get_tree()
+        self._select_action(start_time, state)
         self._save_tree()
         print("Saved tree in {:.3}s".format(time() - start_time))
         print()
@@ -214,7 +203,7 @@ class CustomPlayer(DataPlayer):
         return state_node
 
     def _create_root(self, state: Isolation):
-        assert state.ply_count <= 3, "Ply: " + str(state.ply_count)
+        # assert state.ply_count <= 3, "Ply: " + str(state.ply_count)
         state_node = StateNode(state, None, None)
         self._tree[state] = state_node
         return state_node
