@@ -1,5 +1,6 @@
 import copy
 import random
+from enum import Enum, unique
 from math import log, sqrt
 from time import time
 
@@ -38,6 +39,24 @@ class StateNode:
             stack.extend(node.children)
         return tree
 
+@unique
+class Key(Enum):
+    PARENT = 0
+    PLAYS = 1
+    CHILDREN = 2
+    CAUSING_ACTION = 3
+    WINS = 4
+
+    @staticmethod
+    def create_empty_attributes():
+        return {
+            Key.PARENT: None,
+            Key.CHILDREN: [],
+            Key.CAUSING_ACTION: None,
+            Key.WINS: 0.0,
+            Key.PLAYS: 0,
+        }
+
 
 class CustomPlayer(DataPlayer):
     """ Implement your own agent to play knight's Isolation
@@ -58,133 +77,129 @@ class CustomPlayer(DataPlayer):
     """
     def __init__(self, player_id):
         super().__init__(player_id)
-        self._tree = {}
-        self._root_node_for_turn = None
+        self._tree = {} # type: Dict[Isolation, Dict]
+        self._root_state_for_turn = None
 
     def get_action(self, state: Isolation):
         # self.queue.put(random.choice(state.actions()))  # Do something at least.
         # self.minimax_iterative_deepening(state)
 
+        self._root_state_for_turn = state
+
         if state.ply_count > 1:
             assert self.context
             self._tree = self.context
             assert len(self._tree.keys()) > 0
+        else:
+            self._tree[state] = Key.create_empty_attributes()
 
-        self._root_node_for_turn = self._get_state_node(state)
+        # self._root_node_for_turn = self._get_state_node(state)
 
         self._print_data_tree()
-        self._tree = StateNode.create_state_tree(self._root_node_for_turn)
-        self._print_data_tree()
+        # self._tree = StateNode.create_state_tree(self._root_node_for_turn)
+        # self._print_data_tree()
 
         start = time()
         while True:
-            self._monte_carlo_tree_search(self._root_node_for_turn)
-            if time() - start < .145:
+            self._monte_carlo_tree_search(state)
+            if time() - start < .050:
                 continue
-            action = self._choose_action()
+            action = self._choose_action(state)
             print(len(self._tree.keys()))
+            print("SAVING: " + str(action))
             self.queue.put(action)
             self.context = self._tree
-            print("saved")
+            print("SAVED")
 
-    def _choose_action(self):
-        children = self._root_node_for_turn.children
-        most_played_node = max(children, key=lambda e: e.plays)
-        action = most_played_node.causing_action
-        return action
 
-    def _get_state_node(self, state):
-        if state in self._tree.keys():
-            state_node = self._tree[state]
-        else:
-            state_node = self._create_root(state)
-        return state_node
+    def _choose_action(self, state: Isolation) -> Action:
+        children = self._tree[state][Key.CHILDREN]
+        most_played_state = max(children, key=lambda e: self._tree[e][Key.PLAYS])
+        return self._tree[most_played_state][Key.CAUSING_ACTION]
 
-    def _create_root(self, state: Isolation):
-        assert state.ply_count <= 10, "Ply: " + str(state.ply_count)
-        state_node = StateNode(state, None, None)
-        self._tree[state] = state_node
-        return state_node
+    def _monte_carlo_tree_search(self, state: Isolation):
+        leaf_state = self._mcts_selection(state)
+        leaf_or_child_state = self._mcts_expansion(leaf_state)
+        utility = self._mcts_simulation(leaf_or_child_state, leaf_or_child_state.player())
+        self._mcts_backprop(utility, leaf_or_child_state)
 
-    def _monte_carlo_tree_search(self, node: StateNode):
-        leaf_node = self._mcts_selection(node)
-        leaf_or_child = self._mcts_expansion(leaf_node)
-        utility = self._mcts_simulation(leaf_or_child.state, leaf_or_child.state.player())
-        self._mcts_backprop(utility, leaf_or_child)
-
-    def _mcts_selection(self, node: StateNode) -> StateNode:
+    def _mcts_selection(self, state: Isolation) -> Isolation:
         while True:
-            children = node.children
-            if children:
-                assert len(children) == len(node.state.actions())
-                if node.state.ply_count > 5:
-                    i = sum([child.plays for child in children])
-                    assert node.plays - 1 == i or node.plays == i
+            if self._tree[state][Key.CHILDREN]:
+                children = self._tree[state][Key.CHILDREN] # type: List[Isolation]
+                assert len(children) == len(state.actions()), \
+                    "Children: {}, Actions: {}".format(len(children), len(state.actions()))
                 for child in children:
-                    if child.plays == 0: return child
+                    if self._tree[child][Key.PLAYS] == 0: return child
 
-                if node.plays < 15: # Original Paper had 30 in its game.
-                    node = random.choice(children)
+                if self._tree[state][Key.PLAYS] < 15: # Original Paper had 30 in its game.
+                    state = random.choice(children)
                 else:
-                    node = self._ucb1_algo(children)
+                    state = self._ucb1_algo(state, children)
             else:
-                return node
+                return state
 
-    def _ucb1_algo(self, children):
+    def _ucb1_algo(self, parent_state: Isolation, children: List[Isolation]) -> Isolation:
+        log_parent_plays = log(self._tree[parent_state][Key.PLAYS])
+        # is_own_move = parent_state.player() == self.player_id
         c = sqrt(2)
-        log_parent_plays = log(children[0].parent.plays)
-        is_own_move = children[0].state.player() == self.player_id
         values = []
         for child in children:
-            v = child.wins/child.plays + c * sqrt(log_parent_plays / child.plays)
+            relative_wins = self._tree[child][Key.WINS] / self._tree[child][Key.PLAYS]
+            v = relative_wins + c * sqrt(log_parent_plays / self._tree[child][Key.PLAYS])
             values.append((v, child))
-        if is_own_move:
-            best_value = max(values, key=lambda e: e[0])
-        else:
-            best_value = min(values, key=lambda e: e[0])
+        best_value = max(values, key=lambda e: e[0])
         return best_value[1]
 
-    def _mcts_expansion(self, leaf_node: StateNode) -> StateNode:
-        if leaf_node.state.terminal_test(): return leaf_node
-        children = self._create_children(leaf_node)
+    def _mcts_expansion(self, leaf_state: Isolation) -> Isolation:
+        if leaf_state.terminal_test(): return leaf_state
+        children = self._create_children(leaf_state)
         return random.choice(children)
 
-    def _create_children(self, parent_node: StateNode):
-        for action in parent_node.state.actions():
-            child_state = parent_node.state.result(action)
-            child_node = parent_node.create_child(child_state, action)
-            self._tree[child_state] = child_node
-        return parent_node.children
+    def _create_children(self, parent_state: Isolation):
+        child_states = []
+        for action in parent_state.actions():
+            child_state = parent_state.result(action)
+            child_states.append(child_state)
+
+            child_vals = Key.create_empty_attributes()
+            child_vals[Key.PARENT] = parent_state
+            child_vals[Key.CAUSING_ACTION] = action
+            self._tree[child_state] = child_vals
+        self._tree[parent_state][Key.CHILDREN] = child_states
+        return child_states
 
     def _mcts_simulation(self, state: Isolation, leaf_player_id) -> float:
         while True:
             if state.terminal_test(): return state.utility(leaf_player_id)
             state = state.result(random.choice(state.actions()))
 
-    def _mcts_backprop(self, utility: float, node: StateNode):
-        leaf_player = node.state.player()  # type: int
-        while node:
-            node.plays += 1
+    def _mcts_backprop(self, utility: float, leaf_state: Isolation):
+        leaf_player = leaf_state.player()  # type: int
+        state = leaf_state
+        while state:
+            state_vals = self._tree[state]
+            state_vals[Key.PLAYS] += 1
             if utility == 0:
-                node.wins += .5
+                state_vals[Key.WINS] += 1
             else:
-                p = node.state.player()
+                p = state.player()
                 if utility < 0 and p != leaf_player or \
                    utility > 0 and p == leaf_player:
-                    node.wins += 1
+                    state_vals[Key.WINS] += 1
 
-            if node == self._root_node_for_turn:
+            if state == self._root_state_for_turn: # TODO: Remove if tree gets always pruned.
                 return
             else:
-                node = node.parent
+                state = state_vals[Key.PARENT]
 
     def _print_data_tree(self):
-        stack = [self._root_node_for_turn]
+        stack = [self._root_state_for_turn]
         while stack:
-            node = stack.pop()
-            print(node)
+            state = stack.pop()
+            print(state)
 
-            children = node.children
+            children = self._tree[state][Key.CHILDREN]
             if children:
                 stack.extend(children)
 
