@@ -14,7 +14,7 @@ class BasePlayer:
         self.timer = None
         self.queue = None
         self.context = None
-        self._data = None
+        self.data = None
 
     def get_action(self, state):
         """ Implement a function that calls self.queue.put(ACTION) within the allowed time limit 
@@ -29,10 +29,10 @@ class DataPlayer(BasePlayer):
         super().__init__(player_id)
         try:
             with open("data.pickle", "rb") as f:
-                self._data = pickle.load(f)
+                self.data = pickle.load(f)
         except (IOError, TypeError) as e:
             logger.info(str(e))
-            self._data = None
+            self.data = None
 
 
 class RandomPlayer(BasePlayer):
