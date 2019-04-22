@@ -60,12 +60,12 @@ class MonteCarloSearcher():
         return self._tree
 
     def iterate_once(self):
-        leaf_node = self._mcts_selection(self._root_node)
-        leaf_or_child = self._mcts_expansion(leaf_node)
-        utility = self._mcts_simulation(leaf_or_child.state, leaf_or_child.state.player())
-        self._mcts_backprop(utility, leaf_or_child)
+        leaf_node = self._selection(self._root_node)
+        leaf_or_child = self._expansion(leaf_node)
+        utility = self._simulation(leaf_or_child.state, leaf_or_child.state.player())
+        self._backpropagation(utility, leaf_or_child)
 
-    def _mcts_selection(self, node: StateNode) -> StateNode:
+    def _selection(self, node: StateNode) -> StateNode:
         while True:
             children = node.children
             if children:
@@ -73,7 +73,7 @@ class MonteCarloSearcher():
                 for child in children:
                     if child.plays == 0: return child
 
-                if node.plays < 30: # Original Paper had 30 in its game.
+                if node.plays < 10:  # Original Paper had 30 in its game.
                     node = random.choice(children)
                 else:
                     node = self._ucb1_algo(children)
@@ -89,7 +89,7 @@ class MonteCarloSearcher():
         best_value = max(values, key=lambda e: e[0])
         return best_value[1]
 
-    def _mcts_expansion(self, leaf_node: StateNode) -> StateNode:
+    def _expansion(self, leaf_node: StateNode) -> StateNode:
         if leaf_node.state.terminal_test(): return leaf_node
         children = self._create_children(leaf_node)
         return random.choice(children)
@@ -101,12 +101,12 @@ class MonteCarloSearcher():
             self._tree[child_state] = child_node
         return parent_node.children
 
-    def _mcts_simulation(self, state: Isolation, leaf_player_id) -> float:
+    def _simulation(self, state: Isolation, leaf_player_id) -> float:
         while True:
             if state.terminal_test(): return state.utility(leaf_player_id)
             state = state.result(random.choice(state.actions()))
 
-    def _mcts_backprop(self, utility: float, node: StateNode):
+    def _backpropagation(self, utility: float, node: StateNode):
         leaf_player = node.state.player()  # type: int
         while node:
             node.plays += 1
@@ -199,7 +199,6 @@ class CustomPlayer(DataPlayer):
 
     def _save_tree(self):
         with open(TREE_PICKLE, 'wb') as f:
-            # Pickle the 'data' dictionary using the highest protocol available.
             tree = StateNode.create_state_tree(self._root_node_for_turn)
             pickle.dump(tree, f, pickle.HIGHEST_PROTOCOL)
 
@@ -215,7 +214,7 @@ class CustomPlayer(DataPlayer):
         return state_node
 
     def _create_root(self, state: Isolation):
-        assert state.ply_count <= 2, "Ply: " + str(state.ply_count)
+        assert state.ply_count <= 3, "Ply: " + str(state.ply_count)
         state_node = StateNode(state, None, None)
         self._tree[state] = state_node
         return state_node
