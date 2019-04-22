@@ -1,5 +1,7 @@
-import copy
+import logging
+import pickle
 import random
+import sys
 from math import log, sqrt
 from time import time
 
@@ -7,6 +9,12 @@ from isolation import Isolation
 from isolation.isolation import Action
 from sample_players import DataPlayer
 from typing import *
+
+TREE_PICKLE = 'monte_carlo_search_tree.pickle'
+BUFFER_TIME = .002
+TIME_LIMIT_IN_SEC = .150 - BUFFER_TIME
+OWN_TURNS_TO_LOOK_AHEAD = 4
+C_VALUE = 1.4
 
 
 class StateNode:
@@ -21,7 +29,7 @@ class StateNode:
         self.plays = 0  # type: int
 
     def __str__(self):
-        return "\t"*(self.state.ply_count - 1) + "{}/{}[{}]".format(self.wins, self.plays, self.state.player())
+        return "{}/{}[{}]".format(self.wins, self.plays, self.state.player())
 
     def create_child(self, state: Isolation, causing_action) -> 'StateNode':
         child = StateNode(state, self, causing_action)
@@ -29,13 +37,17 @@ class StateNode:
         return child
 
     @classmethod
-    def create_state_tree(cls, root_node):
+    def create_state_tree(cls, root_node, turns=99999):
         tree = {}
+        starting_depth = root_node.state.ply_count
+        max_depth = starting_depth + turns * 2
         stack = [root_node]
         while stack:
             node = stack.pop()
             tree[node.state] = node
-            stack.extend(node.children)
+            if node.state.ply_count <= max_depth:
+                stack.extend(node.children)
+        print("Nodes in tree: {}".format(len(tree.keys())))
         return tree
 
 
@@ -45,7 +57,7 @@ class CustomPlayer(DataPlayer):
     The get_action() method is the only required method for this project.
     You can modify the interface for get_action by adding *named parameters
     with default values*, but the function MUST remain compatible with the
-    default interface.
+    default interface.logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
     **********************************************************************
     NOTES:
@@ -54,44 +66,65 @@ class CustomPlayer(DataPlayer):
 
     - You can pass state forward to your agent on the next turn by assigning
       any pickleable object to the self.context attribute.
-    *****************************add_child*****************************************
+    **********************************************************************
     """
+
     def __init__(self, player_id):
         super().__init__(player_id)
         self._tree = {}
         self._root_node_for_turn = None
 
     def get_action(self, state: Isolation):
-        # self.queue.put(random.choice(state.actions()))  # Do something at least.
-        # self.minimax_iterative_deepening(state)
+        start_time = time()
+        is_first_move = state.ply_count < 2
 
-        if state.ply_count > 1:
-            assert self.context
-            self._tree = self.context
+        if not is_first_move:
+            self._load_tree()
             assert len(self._tree.keys()) > 0
 
-        self._root_node_for_turn = self._get_state_node(state)
-
-        self._print_data_tree()
-        self._tree = StateNode.create_state_tree(self._root_node_for_turn)
-        self._print_data_tree()
-
-        start = time()
-        while True:
-            self._monte_carlo_tree_search(self._root_node_for_turn)
-            if time() - start < .145:
-                continue
-            action = self._choose_action()
-            print(len(self._tree.keys()))
+        # Don't waste calculation time on initial step.
+        if is_first_move:
+            action = random.choice(state.actions())
             self.queue.put(action)
-            self.context = self._tree
-            print("saved")
+            first_enemy_state = state.result(action)
+            self._root_node_for_turn = self._get_state_node(first_enemy_state)
+        else:
+            self._root_node_for_turn = self._get_state_node(state)
 
-    def _choose_action(self):
+        runs = 0
+        while time() - start_time < TIME_LIMIT_IN_SEC:
+            self._monte_carlo_tree_search(self._root_node_for_turn)
+            runs += 1
+            # self.minimax_iterative_deepening(state)
+
+        if not is_first_move:
+            node = self._best_node()
+            self.queue.put(node.causing_action)
+            print("Finished turn {} at {:.3}s. Winning node (less wins is better): {}" \
+                  .format(state.ply_count, time() - start_time, node))
+            print("Nodes to choose from: ", end='')
+            for child in node.parent.children:
+                print(child, end=', ')
+            print()
+
+        print("MCTS ran {} times. Current player: {}".format(runs, self.player_id))
+        self._save_tree()
+        print("Saved tree in {:.3}s".format(time() - start_time))
+        print()
+
+    def _load_tree(self):
+        with open(TREE_PICKLE, 'rb') as f:
+            self._tree = pickle.load(f)
+
+    def _save_tree(self):
+        with open(TREE_PICKLE, 'wb') as f:
+            # Pickle the 'data' dictionary using the highest protocol available.
+            tree = StateNode.create_state_tree(self._root_node_for_turn)
+            pickle.dump(tree, f, pickle.HIGHEST_PROTOCOL)
+
+    def _best_node(self) -> Action:
         children = self._root_node_for_turn.children
-        most_played_node = max(children, key=lambda e: e.plays)
-        action = most_played_node.causing_action
-        return action
+        return max(children, key=lambda e: e.plays)
 
     def _get_state_node(self, state):
         if state in self._tree.keys():
@@ -101,7 +134,7 @@ class CustomPlayer(DataPlayer):
         return state_node
 
     def _create_root(self, state: Isolation):
-        assert state.ply_count <= 10, "Ply: " + str(state.ply_count)
+        assert state.ply_count <= 2, "Ply: " + str(state.ply_count)
         state_node = StateNode(state, None, None)
         self._tree[state] = state_node
         return state_node
@@ -117,9 +150,6 @@ class CustomPlayer(DataPlayer):
             children = node.children
             if children:
                 assert len(children) == len(node.state.actions())
-                if node.state.ply_count > 5:
-                    i = sum([child.plays for child in children])
-                    assert node.plays - 1 == i or node.plays == i
                 for child in children:
                     if child.plays == 0: return child
 
@@ -131,12 +161,11 @@ class CustomPlayer(DataPlayer):
                 return node
 
     def _ucb1_algo(self, children):
-        c = sqrt(2)
         log_parent_plays = log(children[0].parent.plays)
         is_own_move = children[0].state.player() == self.player_id
         values = []
         for child in children:
-            v = child.wins/child.plays + c * sqrt(log_parent_plays / child.plays)
+            v = child.wins/child.plays + C_VALUE * sqrt(log_parent_plays / child.plays)
             values.append((v, child))
         if is_own_move:
             best_value = max(values, key=lambda e: e[0])
@@ -182,7 +211,7 @@ class CustomPlayer(DataPlayer):
         stack = [self._root_node_for_turn]
         while stack:
             node = stack.pop()
-            print(node)
+            print("\t"*(node.state.ply_count - 1) + node)
 
             children = node.children
             if children:
